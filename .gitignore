@@ -1,6 +1,25 @@
 # Nix build outputs
 result
 result-*
+.nix-profile
+*gc-root*
 
-# Mac OS files
+# Direnv cache
+.direnv/
+
+# macOS files
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Vim backup/temporary files
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Shell history (just in case they end up here)
+.zsh_history
+.bash_history
