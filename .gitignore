@@ -1,0 +1,6 @@
+# Nix build outputs
+result
+result-*
+
+# Mac OS files
+.DS_Store
