@@ -23,7 +23,6 @@
     openjdk
     perl
     python3
-    rbenv
     tldr
     tmux
     tree

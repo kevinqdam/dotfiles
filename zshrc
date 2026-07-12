@@ -50,9 +50,7 @@ function v2g() {
 # Setup paths (moved from bash_profile and zshrc)
 export CPLUS_INCLUDE_PATH="/usr/local/include"
 export LIBRARY_PATH="/usr/local/lib"
-export PATH="$HOME/.rbenv/bin:/usr/local/smlnj/bin:/Applications/Racket v7.4/bin:/usr/local/bin:/usr/local/sbin:$PATH"
-
-eval "$(rbenv init - zsh)"
+export PATH="/usr/local/smlnj/bin:/Applications/Racket v7.4/bin:/usr/local/bin:/usr/local/sbin:$PATH"
 
 # Nix Rebuild Shortcut
 alias nix-rebuild="~/.dotfiles/rebuild.sh"
