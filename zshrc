@@ -53,3 +53,6 @@ export LIBRARY_PATH="/usr/local/lib"
 export PATH="$HOME/.rbenv/bin:/usr/local/smlnj/bin:/Applications/Racket v7.4/bin:/usr/local/bin:/usr/local/sbin:$PATH"
 
 eval "$(rbenv init - zsh)"
+
+# Nix Rebuild Shortcut
+alias nix-rebuild="~/.dotfiles/rebuild.sh"
