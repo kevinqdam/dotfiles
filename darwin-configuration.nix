@@ -37,6 +37,7 @@
       "mono"
       "mysql" 
       "mysql-client"
+      "pi-coding-agent"
       "tcl-tk" 
     ];
 
