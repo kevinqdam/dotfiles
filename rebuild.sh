@@ -9,3 +9,6 @@ nix build .#darwinConfigurations.macbook.system
 
 echo "Applying the system configuration..."
 sudo ./result/sw/bin/darwin-rebuild switch --flake .#macbook
+
+# Keep the upstream Firstmate checkout current after the system is applied.
+./agents/setup-harnesses

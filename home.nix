@@ -2,6 +2,11 @@
   home.username = "kevindam";
   home.homeDirectory = "/Users/kevindam";
 
+  home.sessionVariables = {
+    FIRSTMATE_ROOT = "${config.home.homeDirectory}/dev/firstmate";
+    FIRSTMATE_HOME = "${config.home.homeDirectory}/.local/share/firstmate";
+  };
+
   # Packages that should be installed to the user profile.
   home.packages = with pkgs; [
     automake
@@ -19,7 +24,7 @@
     htop
     libtool
     nghttp2
-    nodejs
+    nodejs_22
     openjdk
     perl
     python3
@@ -76,6 +81,10 @@
 
   # Link AGENTS.md to AntiGravity CLI dir
   home.file.".gemini/antigravity-cli/agents.md".source = ./AGENTS.md;
+
+  # Global Pi integration. It is inert until /firstmate is invoked.
+  home.file.".pi/agent/extensions/firstmate-bootstrap.ts".source = ./agents/pi/extensions/firstmate-bootstrap.ts;
+  home.file.".local/bin/setup-harnesses".source = ./agents/setup-harnesses;
 
   home.stateVersion = "24.05";
 }
