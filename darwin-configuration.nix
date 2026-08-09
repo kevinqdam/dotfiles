@@ -52,6 +52,7 @@
       "logitune"
       "raycast"
       "superwhisper"
+      "tailscale-app"
       "visual-studio-code"
     ];
   };
