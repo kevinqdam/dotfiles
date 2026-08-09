@@ -24,7 +24,7 @@
     htop
     libtool
     nghttp2
-    nodejs
+    nodejs_22
     openjdk
     perl
     python3
