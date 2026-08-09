@@ -83,7 +83,7 @@
   home.file.".gemini/antigravity-cli/agents.md".source = ./AGENTS.md;
 
   # Global Pi integration. It is inert until /firstmate is invoked.
-  home.file.".pi/agent/extensions/firstmate-bootstrap.ts".source = ./firstmate-bootstrap.ts;
+  home.file.".pi/agent/extensions/firstmate-bootstrap.ts".source = ./pi/extensions/firstmate-bootstrap.ts;
   home.file.".local/bin/setup-harnesses".source = ./setup-harnesses;
 
   home.stateVersion = "24.05";
