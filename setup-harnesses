@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+firstmate_root="${FIRSTMATE_ROOT:-$HOME/dev/firstmate}"
+upstream_url="${FIRSTMATE_UPSTREAM_URL:-https://github.com/kunchenguid/firstmate.git}"
+branch="${FIRSTMATE_BRANCH:-main}"
+
+if [[ -e "$firstmate_root" && ! -d "$firstmate_root/.git" ]]; then
+  printf 'setup-harnesses: refusing non-Git Firstmate path: %s\n' "$firstmate_root" >&2
+  exit 1
+fi
+
+if [[ ! -d "$firstmate_root/.git" ]]; then
+  mkdir -p "$(dirname "$firstmate_root")"
+  git clone --branch "$branch" "$upstream_url" "$firstmate_root"
+else
+  if [[ -n "$(git -C "$firstmate_root" status --porcelain)" ]]; then
+    printf 'setup-harnesses: Firstmate has uncommitted changes; refusing to update: %s\n' "$firstmate_root" >&2
+    exit 1
+  fi
+
+  if ! git -C "$firstmate_root" remote get-url upstream >/dev/null 2>&1; then
+    git -C "$firstmate_root" remote add upstream "$upstream_url"
+  fi
+
+  git -C "$firstmate_root" fetch --prune upstream "$branch"
+  git -C "$firstmate_root" checkout "$branch" >/dev/null 2>&1
+  git -C "$firstmate_root" merge --ff-only "upstream/$branch"
+fi
+
+printf 'Firstmate ready at %s (%s)\n' "$firstmate_root" "$(git -C "$firstmate_root" rev-parse --short HEAD)"
