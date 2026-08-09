@@ -1,10 +1,17 @@
-{ pkgs, ... }: {
+{ lib, pkgs, ... }: {
   nix.enable = false;
 
   # Necessary for using flakes on this system.
   nix.settings.experimental-features = "nix-command flakes";
 
-  programs.zsh.enable = true;
+  programs.zsh = {
+    enable = true;
+    interactiveShellInit = lib.mkAfter ''
+      # Homebrew's shellenv has already added the native prefix. Remove the
+      # legacy Intel completion directory before nix-darwin runs compinit.
+      fpath=(''${fpath:#/usr/local/share/zsh/site-functions})
+    '';
+  };
 
   system.configurationRevision = null;
   system.stateVersion = 5;
