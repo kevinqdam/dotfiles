@@ -5,6 +5,13 @@
 - Never use m-dashes.
 - Do not automatically add yourself as a co-author on git commits.
 
+## Git Workflow
+- Never commit directly to `main`.
+- Create a short-lived feature branch for every change.
+- Push the branch and open a pull request so the result can be reviewed on GitHub.
+- Do not merge pull requests unless Kevin explicitly authorizes the merge.
+- Keep unrelated local changes out of the pull request.
+
 ## Declarative System Rules (Nix & Home Manager)
 This system is fully declarative and managed by **Nix, Nix-Darwin, Nix-Homebrew, and Home Manager**. 
 
