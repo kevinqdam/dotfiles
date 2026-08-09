@@ -34,6 +34,7 @@
 
     brews = [
       "blueutil"
+      "herdr"
       "mono"
       "mysql" 
       "mysql-client"
@@ -44,6 +45,7 @@
     casks = [
       "anaconda"
       "antigravity-cli"
+      "codex"
       "google-drive"
       "google-gemini"
       "iterm2"
