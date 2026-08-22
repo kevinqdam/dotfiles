@@ -52,6 +52,7 @@
     casks = [
       "anaconda"
       "antigravity-cli"
+      "chatgpt"
       "codex"
       "google-drive"
       "google-gemini"
