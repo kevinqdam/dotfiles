@@ -87,6 +87,63 @@ for name in $TARGETS; do
   fi
 done
 
+invalid_startup_memory_budget() {
+  printf 'firstmate-config: invalid captain-selected startup memory budget: %s\n' "$1" >&2
+  return 1
+}
+
+validate_startup_memory_budget() {
+  path=$1
+  value=
+  remainder=
+
+  {
+    if ! IFS= read -r value; then
+      invalid_startup_memory_budget "$path"
+      return 1
+    fi
+    if IFS= read -r remainder || [ -n "$remainder" ]; then
+      invalid_startup_memory_budget "$path"
+      return 1
+    fi
+  } < "$path"
+
+  case "$value" in
+    ''|*[!0-9]*)
+      invalid_startup_memory_budget "$path"
+      return 1
+      ;;
+  esac
+  case "$value" in
+    *[1-9]*) ;;
+    *)
+      invalid_startup_memory_budget "$path"
+      return 1
+      ;;
+  esac
+
+  byte_count=$(wc -c < "$path")
+  byte_count=${byte_count//[[:space:]]/}
+  if [ "$byte_count" != "$(( ${#value} + 1 ))" ]; then
+    invalid_startup_memory_budget "$path"
+    return 1
+  fi
+
+  if link_count=$(stat -f '%l' "$path" 2>/dev/null); then
+    :
+  else
+    link_count=$(stat -c '%h' "$path")
+  fi
+  if [ "$link_count" != 1 ]; then
+    invalid_startup_memory_budget "$path"
+    return 1
+  fi
+}
+
+if [ -f "$CONFIG_DIR/startup-memory-budget" ]; then
+  validate_startup_memory_budget "$CONFIG_DIR/startup-memory-budget"
+fi
+
 write_if_absent() {
   name=$1
   content=$2
@@ -108,12 +165,18 @@ write_if_absent() {
     return 1
   fi
   chmod 600 "$tmp"
-  if ! mv -f "$tmp" "$path"; then
+  if ln "$tmp" "$path" 2>/dev/null; then
     rm -f "$tmp"
-    printf 'firstmate-config: could not publish %s\n' "$path" >&2
-    return 1
+    printf 'firstmate-config: created %s\n' "$path"
+    return 0
   fi
-  printf 'firstmate-config: created %s\n' "$path"
+  rm -f "$tmp"
+  if [ -e "$path" ] || [ -L "$path" ]; then
+    printf 'firstmate-config: target appeared during publication and was preserved: %s\n' "$path" >&2
+  else
+    printf 'firstmate-config: could not publish %s\n' "$path" >&2
+  fi
+  return 1
 }
 
 write_if_absent backend "$BACKEND"

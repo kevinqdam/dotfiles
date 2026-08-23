@@ -34,7 +34,7 @@
       # The locked nix-homebrew brew source is the update boundary. Do not
       # replace it with a mutable Homebrew update during activation.
       autoUpdate = false;
-      upgrade = false;
+      upgrade = true;
       cleanup = "none";
     };
     

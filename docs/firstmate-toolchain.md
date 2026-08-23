@@ -13,7 +13,9 @@ Those package versions are resolved from the locked Nixpkgs input rather than fr
 
 Pi, Agy, and Herdr remain Homebrew-managed because the existing configuration already uses their supported macOS installation surfaces.
 Pi is the `pi-coding-agent` formula, Agy is the `antigravity-cli` cask, and Herdr is the `herdr` formula.
-The nix-homebrew source and taps are immutable during activation, and Homebrew auto-update and upgrade are disabled.
+The flake lock pins the nix-homebrew Homebrew implementation, but it does not pin the formula metadata or payloads for these three tools.
+They are an explicitly mutable containment boundary: tap mutation and Homebrew auto-update are disabled, while activation runs `brew upgrade` so stale installations advance to the versions currently resolved by Homebrew.
+Identical flake locks can therefore resolve different Pi, Agy, or Herdr versions.
 
 The current Firstmate installers pin no-mistakes 1.57.0 and Treehouse 2.0.1 to official macOS arm64 release assets with fixed SHA-256 hashes.
 The Nix derivation in `nix/firstmate-toolchain.nix` owns those pins and does not run either upstream installer.
@@ -32,14 +34,13 @@ The checked-in Firstmate source also owns the exact Herdr protocol floor and the
 The official Antigravity CLI page documents `curl -fsSL https://antigravity.google/cli/install.sh | bash` as its macOS installation surface.
 This configuration intentionally keeps the existing Homebrew `antigravity-cli` cask instead of replacing it with an imperative installer.
 
-The cask is declarative and reproducible at the Homebrew revision in `flake.lock`, but the upstream CLI advertises automatic updates.
+The cask remains declaratively present, but its recipe and payload are not pinned by `flake.lock`, and the upstream CLI advertises automatic updates.
 Agy can therefore advance its installed payload outside a Nix rebuild, which is an unavoidable limit of retaining the supported cask surface.
-A rebuild does not manage Agy's internal self-update decision while it is running.
-Reapplying the locked cask or changing the locked Homebrew input is the supported way to converge a drifted installation after reviewing the change.
+A rebuild requests a Homebrew upgrade but does not manage Agy's internal self-update decision, pin its payload, or guarantee a downgrade after self-update drift.
 No credentials or Agy authentication files are managed here.
 
 Pi exposes `pi update` and Herdr exposes `herdr update` as explicit self-update commands as well.
-Those commands are outside declarative activation and can create drift from the locked Homebrew source, so the rebuild remains the convergence boundary for those tools.
+Those commands are outside declarative activation and can create drift, while the next rebuild again requests Homebrew's currently resolved upgrades.
 The Nix-packaged no-mistakes and AXI tools are likewise updated by changing their pinned release or npm lock inputs, not by invoking a mutable updater.
 
 ## Operational-home activation
@@ -54,8 +55,9 @@ The defaults select Herdr, Pi, the approved Pi model and effort routing, and a 7
 The Firstmate dispatcher still gives explicit per-task captain `--harness`, `--model`, and `--effort` requests precedence over these defaults.
 
 A populated home is treated as captain-owned.
-Existing regular config files are left byte-for-byte unchanged, including a captain-selected startup memory budget.
+Existing regular config files are left byte-for-byte unchanged, and a captain-selected startup memory budget is preserved only when it is a positive decimal integer terminated by exactly one newline and has one hard link.
 A symlink or other non-regular config target causes activation to fail closed instead of replacing a Home Manager link or an unexpected object.
+Missing settings are published atomically without replacing a target that appears concurrently; that race fails activation and preserves the competing file for review.
 Runtime state, task records, backlog, data, project clones, credentials, and generated monitoring artifacts are never touched by the activation hook.
 
 ## Firstmate checkout remotes
