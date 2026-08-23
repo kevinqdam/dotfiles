@@ -31,9 +31,11 @@
   homebrew = {
     enable = true;
     onActivation = {
-      autoUpdate = true;
-      upgrade = true;
-      cleanup = "zap";
+      # The locked nix-homebrew brew source is the update boundary. Do not
+      # replace it with a mutable Homebrew update during activation.
+      autoUpdate = false;
+      upgrade = false;
+      cleanup = "none";
     };
     
     taps = [
