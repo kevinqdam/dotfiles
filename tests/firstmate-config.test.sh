@@ -91,16 +91,47 @@ mkdir -p "$race/config" "$race_bin"
 real_ln=$(command -v ln)
 printf '%s\n' \
   '#!/usr/bin/env bash' \
-  'if [ "$2" = "$RACE_TARGET" ] && [ ! -e "$2" ]; then' \
-  '  printf "captain-won\\n" > "$2"' \
-  'fi' \
+  'case "${RACE_ACTION:-}" in' \
+  '  claim-target)' \
+  '    if [ "$2" = "$RACE_TARGET" ] && [ ! -e "$2" ]; then' \
+  '      printf "captain-won\\n" > "$2"' \
+  '    fi' \
+  '    ;;' \
+  '  invalid-budget)' \
+  '    if [ "$2" = "$RACE_TRIGGER" ] && [ ! -e "$RACE_TARGET" ]; then' \
+  '      printf "0\\n" > "$RACE_TARGET"' \
+  '    fi' \
+  '    ;;' \
+  '  symlink-budget)' \
+  '    if [ "$2" = "$RACE_TRIGGER" ] && [ ! -e "$RACE_TARGET" ] && [ ! -L "$RACE_TARGET" ]; then' \
+  '      "$REAL_LN" -s "$RACE_SOURCE" "$RACE_TARGET"' \
+  '    fi' \
+  '    ;;' \
+  'esac' \
   'exec "$REAL_LN" "$@"' > "$race_bin/ln"
 chmod +x "$race_bin/ln"
 export REAL_LN="$real_ln"
 export RACE_TARGET="$race/config/backend"
-if PATH="$race_bin:$PATH" "$MATERIALIZER" "$race" >/dev/null 2>&1; then
+if RACE_ACTION=claim-target PATH="$race_bin:$PATH" "$MATERIALIZER" "$race" >/dev/null 2>&1; then
   fail 'concurrent target publication did not fail closed'
 fi
 assert_eq 'captain-won' "$(cat "$race/config/backend")"
+
+for race_action in invalid-budget symlink-budget; do
+  preservation_race="$TMP/preservation-$race_action"
+  mkdir -p "$preservation_race/config"
+  printf '9100\n' > "$preservation_race/captain-budget"
+  export RACE_TRIGGER="$preservation_race/config/backend"
+  export RACE_TARGET="$preservation_race/config/startup-memory-budget"
+  export RACE_SOURCE="$preservation_race/captain-budget"
+  if RACE_ACTION="$race_action" PATH="$race_bin:$PATH" "$MATERIALIZER" "$preservation_race" >/dev/null 2>&1; then
+    fail "concurrent $race_action preservation did not fail closed"
+  fi
+  if [ "$race_action" = symlink-budget ]; then
+    [ -L "$RACE_TARGET" ] || fail 'concurrent startup budget symlink was replaced'
+  else
+    assert_eq '0' "$(cat "$RACE_TARGET")"
+  fi
+done
 
 printf 'ok - config materialization, validation, preservation, and atomic publication contracts\n'

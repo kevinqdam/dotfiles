@@ -97,6 +97,11 @@ validate_startup_memory_budget() {
   value=
   remainder=
 
+  if [ -L "$path" ] || [ ! -f "$path" ]; then
+    invalid_startup_memory_budget "$path"
+    return 1
+  fi
+
   {
     if ! IFS= read -r value; then
       invalid_startup_memory_budget "$path"
@@ -138,6 +143,11 @@ validate_startup_memory_budget() {
     invalid_startup_memory_budget "$path"
     return 1
   fi
+
+  if [ -L "$path" ] || [ ! -f "$path" ]; then
+    invalid_startup_memory_budget "$path"
+    return 1
+  fi
 }
 
 if [ -f "$CONFIG_DIR/startup-memory-budget" ]; then
@@ -149,12 +159,28 @@ write_if_absent() {
   content=$2
   path="$CONFIG_DIR/$name"
 
+  if [ -L "$path" ]; then
+    printf 'firstmate-config: refusing symlink target; review and replace it manually: %s\n' "$path" >&2
+    return 1
+  fi
+  if [ -e "$path" ] && [ ! -f "$path" ]; then
+    printf 'firstmate-config: refusing non-regular target: %s\n' "$path" >&2
+    return 1
+  fi
   if [ -f "$path" ]; then
     if printf '%s' "$content" | cmp -s "$path" -; then
-      printf 'firstmate-config: unchanged %s\n' "$path"
+      disposition=unchanged
     else
-      printf 'firstmate-config: preserved locally changed %s\n' "$path"
+      disposition='preserved locally changed'
     fi
+    if [ -L "$path" ] || [ ! -f "$path" ]; then
+      printf 'firstmate-config: target changed during preservation: %s\n' "$path" >&2
+      return 1
+    fi
+    if [ "$name" = startup-memory-budget ]; then
+      validate_startup_memory_budget "$path"
+    fi
+    printf 'firstmate-config: %s %s\n' "$disposition" "$path"
     return 0
   fi
 

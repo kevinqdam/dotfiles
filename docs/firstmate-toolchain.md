@@ -14,7 +14,7 @@ Those package versions are resolved from the locked Nixpkgs input rather than fr
 Pi, Agy, and Herdr remain Homebrew-managed because the existing configuration already uses their supported macOS installation surfaces.
 Pi is the `pi-coding-agent` formula, Agy is the `antigravity-cli` cask, and Herdr is the `herdr` formula.
 The flake lock pins the nix-homebrew Homebrew implementation, but it does not pin the formula metadata or payloads for these three tools.
-They are an explicitly mutable containment boundary: tap mutation and Homebrew auto-update are disabled, while activation runs `brew upgrade` so stale installations advance to the versions currently resolved by Homebrew.
+They are an explicitly mutable containment boundary: tap mutation and Homebrew's implementation auto-update are disabled, while activation forces an API metadata refresh and runs `brew upgrade` so stale installations advance to the versions currently resolved by Homebrew.
 Identical flake locks can therefore resolve different Pi, Agy, or Herdr versions.
 
 The current Firstmate installers pin no-mistakes 1.57.0 and Treehouse 2.0.1 to official macOS arm64 release assets with fixed SHA-256 hashes.

@@ -36,6 +36,7 @@
       autoUpdate = false;
       upgrade = true;
       cleanup = "none";
+      extraEnv.HOMEBREW_FORCE_API_AUTO_UPDATE = "1";
     };
     
     taps = [
