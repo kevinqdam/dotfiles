@@ -20,15 +20,18 @@ assert_eq() {
 }
 
 expect_refusal() {
-  name=$1
-  library=$2
-  owner=$3
-  if "$MIGRATOR" "$library" "$owner" >"$TMP/$name.out" 2>"$TMP/$name.err"; then
+  local name=$1
+  local library=$2
+  local expected_owner=$3
+  if "$MIGRATOR" "$library" "$expected_owner" "$managed_symlink_owner" \
+    "$managed_symlink_group" >"$TMP/$name.out" 2>"$TMP/$name.err"; then
     fail "$name path was accepted"
   fi
 }
 
 owner=$(id -un)
+managed_symlink_owner=$owner
+managed_symlink_group=$(id -gn)
 arm_library="$TMP/opt/homebrew/Library"
 intel_library="$TMP/usr/local/Homebrew/Library"
 mkdir -p "$arm_library/Taps" "$intel_library/Taps"
@@ -65,13 +68,15 @@ if declarative_link "$intel_library/Taps"; then
   fail 'populated Intel Taps fixture did not reproduce the upstream masking failure'
 fi
 
-"$MIGRATOR" "$arm_library" "$owner" >"$TMP/arm-first.out" 2>"$TMP/arm-first.err"
+"$MIGRATOR" "$arm_library" "$owner" "$managed_symlink_owner" \
+  "$managed_symlink_group" >"$TMP/arm-first.out" 2>"$TMP/arm-first.err"
 [ ! -e "$arm_library/Taps" ] || fail 'empty ARM Taps directory was not removed'
 [ ! -L "$arm_library/Taps" ] || fail 'empty ARM Taps symlink was created by migration'
 grep -Fq "$arm_library/Taps" "$TMP/arm-first.err" || fail 'ARM removal was not reported'
 
 # The second activation sees a missing path and must be a no-op.
-"$MIGRATOR" "$arm_library" "$owner" >"$TMP/arm-second.out" 2>"$TMP/arm-second.err"
+"$MIGRATOR" "$arm_library" "$owner" "$managed_symlink_owner" \
+  "$managed_symlink_group" >"$TMP/arm-second.out" 2>"$TMP/arm-second.err"
 [ ! -s "$TMP/arm-second.err" ] || fail 'idempotent ARM migration emitted an error'
 intel_after=$(find "$intel_library/Taps" -print | LC_ALL=C sort)
 assert_eq "$intel_before" "$intel_after"
@@ -90,6 +95,12 @@ ln -s "$symlink_target" "$symlink_case/Taps"
 expect_refusal symlink "$symlink_case" "$owner"
 [ -L "$symlink_case/Taps" ] || fail 'Taps symlink was replaced'
 [ -d "$symlink_target" ] || fail 'symlink target was changed'
+
+dangling_case="$TMP/dangling/Library"
+mkdir -p "$dangling_case"
+ln -s /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-taps-env "$dangling_case/Taps"
+expect_refusal dangling "$dangling_case" "$owner"
+[ -L "$dangling_case/Taps" ] || fail 'dangling Taps symlink was replaced'
 
 file_case="$TMP/file/Library"
 mkdir -p "$file_case"
@@ -125,15 +136,55 @@ command -v nix >/dev/null 2>&1 || fail 'nix is required for prefix-boundary vali
 command -v jq >/dev/null 2>&1 || fail 'jq is required for prefix-boundary validation'
 system=$(cd "$SCRIPT_DIR" && nix build .#darwinConfigurations.macbook.system \
   --no-link --print-out-paths)
-setup_script=$(cd "$SCRIPT_DIR" && nix eval --impure --raw --no-write-lock-file \
-  '.#darwinConfigurations.macbook.config.system.activationScripts.setup-homebrew.text' \
-  | awk '/-setup-homebrew$/ { print $1 }')
+setup_text=$(cd "$SCRIPT_DIR" && nix eval --impure --raw --no-write-lock-file \
+  '.#darwinConfigurations.macbook.config.system.activationScripts.setup-homebrew.text')
+setup_script=$(printf '%s\n' "$setup_text" | awk '/-setup-homebrew$/ { print $1 }')
 [ -x "$setup_script" ] || fail 'built setup-homebrew script is unavailable'
 if grep -Fq 'HOMEBREW_PREFIX="/usr/local"' "$setup_script" \
   || grep -Fq 'setting up Homebrew (/usr/local)' "$setup_script"; then
   fail 'built activation still attempts to set up the disabled Intel prefix'
 fi
 [ -x "$system/activate" ] || fail 'locked system activation output is unavailable'
+printf '%s\n' "$setup_text" | awk '$1 == "root" { found = 1 } END { exit !found }' \
+  || fail 'activation does not pass root as the managed symlink owner'
+printf '%s\n' "$setup_text" | awk '$1 == "admin" { found = 1 } END { exit !found }' \
+  || fail 'activation does not pass admin as the managed symlink group'
+
+managed_target=$(find /nix/store -maxdepth 1 -type d -name '*-taps-env' \
+  | LC_ALL=C sort | head -1)
+[ -n "$managed_target" ] || fail 'built nix-homebrew taps environment is unavailable'
+
+# A symlink with a valid managed target but the wrong lstat owner is also
+# ambiguous and must remain untouched.
+wrong_symlink="$TMP/wrong-symlink/Library"
+mkdir -p "$wrong_symlink"
+ln -s "$managed_target" "$wrong_symlink/Taps"
+if [ "$(id -u)" -eq 0 ]; then
+  wrong_symlink_owner=nobody
+else
+  wrong_symlink_owner=root
+fi
+if id -u "$wrong_symlink_owner" >/dev/null 2>&1 \
+  && [ "$(id -u "$wrong_symlink_owner")" != "$(id -u)" ]; then
+  if "$MIGRATOR" "$wrong_symlink" "$owner" "$wrong_symlink_owner" \
+    "$managed_symlink_group" >"$TMP/wrong-symlink.out" 2>"$TMP/wrong-symlink.err"; then
+    fail 'wrong-owner managed-shaped symlink was accepted'
+  fi
+  [ -L "$wrong_symlink/Taps" ] || fail 'wrong-owner symlink was replaced'
+fi
+
+# The first activation removes an empty ordinary path; nix-homebrew then
+# creates this exact root-owned managed symlink. Repeated activation must
+# accept and preserve it rather than treating it as legacy state.
+repeat_library="$TMP/repeat/Library"
+mkdir -p "$repeat_library/Taps"
+"$MIGRATOR" "$repeat_library" "$owner" root admin
+[ ! -e "$repeat_library/Taps" ] || fail 'repeat fixture did not remove its empty legacy directory'
+ln -s "$managed_target" "$repeat_library/Taps"
+"$MIGRATOR" "$repeat_library" "$owner" "$managed_symlink_owner" \
+  "$managed_symlink_group"
+[ "$(readlink "$repeat_library/Taps")" = "$managed_target" ] \
+  || fail 'managed Taps symlink was not preserved'
 
 prefixes=$(cd "$SCRIPT_DIR" && nix eval --impure --json --no-write-lock-file \
   '.#darwinConfigurations.macbook.config.nix-homebrew.prefixes')
@@ -153,7 +204,8 @@ assert_eq /opt/homebrew "$enabled_prefixes"
 printf '%s\n' "$enabled_prefixes" | while IFS= read -r prefix; do
   case "$prefix" in
     /opt/homebrew)
-      "$MIGRATOR" "$arm_library" "$owner"
+      "$MIGRATOR" "$arm_library" "$owner" "$managed_symlink_owner" \
+        "$managed_symlink_group"
       ln -s "$managed_taps" "$arm_library/Taps"
       printf 'setting up Homebrew (%s)\n' "$prefix" >> "$TMP/activation.log"
       ;;
