@@ -19,6 +19,13 @@ After Bundle completes, activation forces an API metadata refresh and upgrades o
 Other Homebrew formulae and casks are not part of this Firstmate convergence step.
 Identical flake locks can therefore resolve different Pi, Agy, or Herdr versions.
 
+## Homebrew migration boundary
+
+This Apple Silicon configuration manages only the native `/opt/homebrew` prefix.
+`nix-homebrew.enableRosetta = false` deliberately leaves the existing `/usr/local` Homebrew tree, including its taps and package state, untouched.
+Before native nix-homebrew setup, activation removes an ordinary `/opt/homebrew/Library/Taps` directory only when it is empty and owned and searchable by the configured Homebrew user.
+A missing directory is a no-op on later activations; a non-empty, symlinked, non-directory, unreadable, wrong-owner, or otherwise ambiguous path fails closed instead of being overwritten.
+
 The current Firstmate installers pin no-mistakes 1.57.0 and Treehouse 2.0.1 to official macOS arm64 release assets with fixed SHA-256 hashes.
 The Nix derivation in `nix/firstmate-toolchain.nix` owns those pins and does not run either upstream installer.
 

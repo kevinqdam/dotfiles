@@ -38,7 +38,8 @@
         {
           nix-homebrew = {
             enable = true;
-            enableRosetta = true;
+            # The captain's Intel Homebrew tree is outside this managed system.
+            enableRosetta = false;
             user = username;
             autoMigrate = true;
             mutableTaps = false;

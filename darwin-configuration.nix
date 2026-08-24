@@ -72,6 +72,14 @@
     ];
   };
 
+  # nix-homebrew's declarative Taps link cannot replace an ordinary legacy
+  # directory. Prepare only the native prefix immediately before its setup.
+  system.activationScripts.setup-homebrew.text = lib.mkBefore ''
+    ${./agents/migrate-empty-homebrew-taps} \
+      ${lib.escapeShellArg config.nix-homebrew.prefixes.${config.nix-homebrew.defaultArm64Prefix}.library} \
+      ${lib.escapeShellArg config.nix-homebrew.user}
+  '';
+
   system.activationScripts.postActivation.text = lib.mkAfter ''
     ${./agents/converge-firstmate-homebrew} \
       ${lib.escapeShellArg "${config.homebrew.prefix}/bin/brew"} \

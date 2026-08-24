@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Remove only the empty legacy Taps directory that blocks nix-homebrew's
+# declarative Taps link. Everything else fails closed and remains untouched.
+set -euo pipefail
+
+if [ "$#" -ne 2 ]; then
+  printf 'usage: %s <homebrew-library> <homebrew-owner>\n' "$0" >&2
+  exit 2
+fi
+
+library=$1
+owner=$2
+taps="$library/Taps"
+
+refuse() {
+  printf 'nix-homebrew Taps migration: refusing %s: %s\n' "$taps" "$1" >&2
+  exit 1
+}
+
+# A missing path is already safe for nix-homebrew and makes repeated
+# activation idempotent. Check -L separately so a dangling symlink is never
+# mistaken for a missing path.
+if [ ! -e "$taps" ] && [ ! -L "$taps" ]; then
+  exit 0
+fi
+
+if [ -L "$taps" ]; then
+  refuse 'path is a symlink'
+fi
+if [ ! -d "$taps" ]; then
+  refuse 'path is not an ordinary directory'
+fi
+
+owner_uid=$(id -u "$owner" 2>/dev/null) || refuse "owner cannot be resolved: $owner"
+
+case "$(uname -s)" in
+  Darwin)
+    actual_uid=$(/usr/bin/stat -f '%u' "$taps" 2>/dev/null) || refuse 'owner cannot be inspected'
+    mode=$(/usr/bin/stat -f '%A' "$taps" 2>/dev/null) || refuse 'permissions cannot be inspected'
+    ;;
+  *)
+    actual_uid=$(/usr/bin/stat -c '%u' "$taps" 2>/dev/null) || refuse 'owner cannot be inspected'
+    mode=$(/usr/bin/stat -c '%a' "$taps" 2>/dev/null) || refuse 'permissions cannot be inspected'
+    ;;
+esac
+
+if [ "$actual_uid" != "$owner_uid" ]; then
+  refuse "directory is owned by uid $actual_uid, expected uid $owner_uid"
+fi
+
+# The activation process is privileged, so test the owner permission bits
+# rather than relying on root's access. Read and search are both required to
+# positively establish that the directory can be inspected.
+case "$mode" in
+  ''|*[!0-7]*)
+    refuse 'permissions are ambiguous'
+    ;;
+esac
+while [ "${#mode}" -gt 3 ]; do
+  mode=${mode#?}
+done
+if [ "${#mode}" -ne 3 ]; then
+  refuse 'permissions are ambiguous'
+fi
+owner_mode=${mode%??}
+case "$owner_mode" in
+  4|5|6|7) ;;
+  *) refuse 'directory is not readable and searchable by its owner' ;;
+esac
+
+# Include dot files and broken symlinks. A literal unmatched glob is ignored,
+# while every real child causes a refusal instead of a recursive deletion.
+for child in "$taps"/* "$taps"/.[!.]* "$taps"/..?*; do
+  if [ -e "$child" ] || [ -L "$child" ]; then
+    refuse 'directory is not empty'
+  fi
+done
+
+# rmdir is intentionally the only mutating operation. It refuses if a child
+# appeared since inspection and never follows a symlink as rm -rf would.
+if ! /bin/rmdir "$taps"; then
+  refuse 'directory changed or could not be removed safely'
+fi
+
+printf 'nix-homebrew Taps migration: removed empty legacy directory %s\n' "$taps" >&2
