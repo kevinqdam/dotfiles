@@ -9,6 +9,8 @@ trap 'rm -rf "$TMP"' EXIT
 calls="$TMP/calls"
 brew="$TMP/brew"
 
+# The single-quoted lines are emitted into the fake executable for expansion there.
+# shellcheck disable=SC2016
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \

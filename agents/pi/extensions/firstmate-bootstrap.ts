@@ -18,9 +18,7 @@ const canonicalHome = resolve(
 // secondmate launches, is authoritative. An empty secondmate override means
 // that its checked-out working directory is the code root for this process.
 const codeRoot = hasEnvironmentValue("FM_ROOT_OVERRIDE")
-  ? process.env.FM_ROOT_OVERRIDE
-    ? resolve(process.env.FM_ROOT_OVERRIDE)
-    : cwd
+  ? process.env.FM_ROOT_OVERRIDE ? resolve(process.env.FM_ROOT_OVERRIDE) : cwd
   : primaryRoot;
 const activeHome = process.env.FM_HOME
   ? resolve(process.env.FM_HOME)
@@ -47,7 +45,10 @@ if (active || (!hasEnvironmentValue("FM_HOME") && inPrimaryRoot)) {
   applyPrimaryDefaults();
 }
 
-async function loadFirstmateExtension(pi: ExtensionAPI, name: string): Promise<void> {
+async function loadFirstmateExtension(
+  pi: ExtensionAPI,
+  name: string,
+): Promise<void> {
   const path = resolve(codeRoot, ".pi/extensions", name);
   if (!existsSync(path)) return;
   const loaded = await import(pathToFileURL(path).href);
@@ -62,9 +63,17 @@ export default async function (pi: ExtensionAPI) {
         ctx.ui.notify("Firstmate is already active for this session.", "info");
         return;
       }
-      const git = await pi.exec("git", ["-C", cwd, "rev-parse", "--show-toplevel"]);
+      const git = await pi.exec("git", [
+        "-C",
+        cwd,
+        "rev-parse",
+        "--show-toplevel",
+      ]);
       if (git.code !== 0) {
-        ctx.ui.notify("Firstmate requires a Git repository as the current project.", "error");
+        ctx.ui.notify(
+          "Firstmate requires a Git repository as the current project.",
+          "error",
+        );
         return;
       }
       applyPrimaryDefaults();
@@ -93,8 +102,7 @@ export default async function (pi: ExtensionAPI) {
     if (!existsSync(agentsPath)) return;
     const instructions = readFileSync(agentsPath, "utf8");
     return {
-      systemPrompt:
-        `${event.systemPrompt}\n\n` +
+      systemPrompt: `${event.systemPrompt}\n\n` +
         `# Firstmate instructions\n\n${instructions}`,
     };
   });

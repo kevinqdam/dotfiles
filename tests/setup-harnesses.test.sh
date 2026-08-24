@@ -6,6 +6,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SETUP="$SCRIPT_DIR/agents/setup-harnesses"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/setup-harnesses-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
+REAL_GIT=$(command -v git)
 
 fail() {
   printf 'setup-harnesses.test.sh: %s\n' "$*" >&2
@@ -115,6 +116,31 @@ fi
 assert_eq 'captain-work' "$(git -C "$off_target_checkout" branch --show-current)"
 assert_eq "$off_target_head" "$(git -C "$off_target_checkout" rev-parse HEAD)"
 git -C "$off_target_checkout" cat-file -e "$off_target_head^{commit}"
+
+default_checkout="$TMP/default-checkout"
+git clone --branch main "$origin" "$default_checkout" >/dev/null
+fake_bin="$TMP/fake-bin"
+mkdir -p "$fake_bin"
+# The single-quoted condition is emitted into the fake Git executable.
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [ "$#" -ge 3 ] && [ "$1" = -C ] && [ "$3" = fetch ]; then' \
+  '  exit 0' \
+  'fi' \
+  "exec '$REAL_GIT' \"\$@\"" > "$fake_bin/git"
+chmod +x "$fake_bin/git"
+PATH="$fake_bin:$PATH" FIRSTMATE_ROOT="$default_checkout" FIRSTMATE_BRANCH=main \
+  "$SETUP" >/dev/null
+assert_eq 'git@github.com:kevinqdam/firstmate-local.git' \
+  "$("$REAL_GIT" -C "$default_checkout" remote get-url origin)"
+assert_eq 'git@github.com:kevinqdam/firstmate-local.git' \
+  "$("$REAL_GIT" -C "$default_checkout" config --get remote.origin.pushurl)"
+assert_eq 'https://github.com/kunchenguid/firstmate.git' \
+  "$("$REAL_GIT" -C "$default_checkout" remote get-url upstream)"
+assert_eq 'no_push://public-upstream-disabled' \
+  "$("$REAL_GIT" -C "$default_checkout" config --get remote.upstream.pushurl)"
 
 printf 'uncommitted\n' >> "$checkout/README.md"
 if run_setup; then

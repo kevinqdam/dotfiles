@@ -64,7 +64,7 @@ Existing regular config files are left byte-for-byte unchanged, and a captain-se
 A symlink or other non-regular config target causes activation to fail closed instead of replacing a Home Manager link or an unexpected object.
 Missing settings are published atomically without replacing a target that appears concurrently; that race fails activation and preserves the competing file for review.
 Canonical home and config directories are opened component by component without following symlinks, and all inspection, validation, temporary-file, and publication operations use their held directory descriptors.
-Runtime state, task records, backlog, data, project clones, credentials, and generated monitoring artifacts are never touched by the activation hook.
+Runtime state, task records, captain memory, backlog, data, project clones, credentials, authentication files, and generated monitoring artifacts are never touched by the activation hook.
 
 ## Firstmate checkout remotes
 
