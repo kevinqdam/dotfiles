@@ -140,6 +140,14 @@ printf 'captain-won\n' > "$race/config/startup-memory-budget"
 finish_hooked_failure 'concurrent target publication did not fail closed'
 assert_eq 'captain-won' "$(cat "$race/config/startup-memory-budget")"
 
+publication_rewrite="$TMP/publication-rewrite"
+mkdir -p "$publication_rewrite/config"
+start_hooked before-publish-boundary "$publication_rewrite"
+printf 'abcd\n' > "$publication_rewrite/config/startup-memory-budget"
+finish_hooked_failure 'in-place startup budget publication rewrite did not fail closed'
+assert_eq 'abcd' "$(cat "$publication_rewrite/config/startup-memory-budget")"
+[ ! -e "$publication_rewrite/config/backend" ] || fail 'publication rewrite partially materialized configuration'
+
 replacement_race="$TMP/preservation-replacement"
 mkdir -p "$replacement_race/config"
 printf '9100\n' > "$replacement_race/config/startup-memory-budget"

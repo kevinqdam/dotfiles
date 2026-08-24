@@ -309,7 +309,7 @@ static int publish_target(const struct target *target) {
     snprintf(temporary, sizeof(temporary), ".firstmate-config.%ld.%u",
              (long)getpid(), counter++);
     temporary_fd = openat(config_fd, temporary,
-                          O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+                          O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
                           0600);
     if (temporary_fd < 0 && errno != EEXIST) {
       break;
@@ -326,34 +326,64 @@ static int publish_target(const struct target *target) {
     return 1;
   }
   struct stat temporary_state;
-  bool temporary_valid = fstat(temporary_fd, &temporary_state) == 0;
-  if (close(temporary_fd) < 0) {
-    temporary_valid = false;
-  }
-  if (!temporary_valid) {
+  if (fstat(temporary_fd, &temporary_state) < 0 ||
+      !S_ISREG(temporary_state.st_mode) || temporary_state.st_nlink != 1 ||
+      temporary_state.st_size != (off_t)target->length) {
+    close(temporary_fd);
     unlinkat(config_fd, temporary, 0);
     fail_path("could not finalize temporary file", target->name);
     return 1;
   }
   test_hook("before-publish");
   if (linkat(config_fd, temporary, config_fd, target->name, 0) < 0) {
+    int link_error = errno;
+    close(temporary_fd);
     unlinkat(config_fd, temporary, 0);
-    fail_path(errno == EEXIST ? "target appeared during publication and was preserved"
-                              : "could not publish target",
+    fail_path(link_error == EEXIST
+                  ? "target appeared during publication and was preserved"
+                  : "could not publish target",
               target->name);
     return 1;
   }
   if (unlinkat(config_fd, temporary, 0) < 0) {
+    close(temporary_fd);
     fail_path("could not remove publication link", target->name);
     return 1;
   }
+  struct stat published_state;
+  if (fstat(temporary_fd, &published_state) < 0 ||
+      !S_ISREG(published_state.st_mode) || published_state.st_nlink != 1) {
+    close(temporary_fd);
+    fail_path("could not validate published target", target->name);
+    return 1;
+  }
+  test_hook("before-publish-boundary");
+  struct stat before_read;
+  struct stat after_read;
   struct stat current;
-  bool valid = fstatat(config_fd, target->name, &current,
-                       AT_SYMLINK_NOFOLLOW) == 0 &&
-               S_ISREG(current.st_mode) && current.st_nlink == 1 &&
-               same_identity(&temporary_state, &current) &&
-               temporary_state.st_size == current.st_size &&
-               verify_directories();
+  size_t length = 0;
+  unsigned char *data = NULL;
+  bool readable = fstat(temporary_fd, &before_read) == 0 &&
+                  lseek(temporary_fd, 0, SEEK_SET) == 0;
+  if (readable) {
+    data = read_all(temporary_fd, &length);
+    readable = data != NULL && fstat(temporary_fd, &after_read) == 0;
+  }
+  bool valid =
+      readable && S_ISREG(before_read.st_mode) &&
+      S_ISREG(after_read.st_mode) && before_read.st_nlink == 1 &&
+      after_read.st_nlink == 1 &&
+      fstatat(config_fd, target->name, &current, AT_SYMLINK_NOFOLLOW) == 0 &&
+      S_ISREG(current.st_mode) && current.st_nlink == 1 &&
+      same_metadata(&published_state, &before_read) &&
+      same_metadata(&before_read, &after_read) &&
+      same_metadata(&after_read, &current) && length == target->length &&
+      memcmp(data, target->content, target->length) == 0 &&
+      verify_directories();
+  free(data);
+  if (close(temporary_fd) < 0) {
+    valid = false;
+  }
   if (!valid) {
     fail_path("target changed during publication", target->name);
     return 1;

@@ -15,6 +15,7 @@ Pi, Agy, and Herdr remain Homebrew-managed because the existing configuration al
 Pi is the `pi-coding-agent` formula, Agy is the `antigravity-cli` cask, and Herdr is the `herdr` formula.
 The flake lock pins the nix-homebrew Homebrew implementation, but it does not pin the formula metadata or payloads for these three tools.
 They are an explicitly mutable containment boundary: tap mutation and Homebrew's implementation auto-update are disabled, while activation forces an API metadata refresh and runs `brew upgrade` so stale installations advance to the versions currently resolved by Homebrew.
+The Agy cask is marked greedy so Homebrew includes it in those upgrades even though the cask advertises its own automatic updater.
 Identical flake locks can therefore resolve different Pi, Agy, or Herdr versions.
 
 The current Firstmate installers pin no-mistakes 1.57.0 and Treehouse 2.0.1 to official macOS arm64 release assets with fixed SHA-256 hashes.
@@ -37,8 +38,9 @@ The official Antigravity CLI page documents `curl -fsSL https://antigravity.goog
 This configuration intentionally keeps the existing Homebrew `antigravity-cli` cask instead of replacing it with an imperative installer.
 
 The cask remains declaratively present, but its recipe and payload are not pinned by `flake.lock`, and the upstream CLI advertises automatic updates.
-Agy can therefore advance its installed payload outside a Nix rebuild, which is an unavoidable limit of retaining the supported cask surface.
-A rebuild requests a Homebrew upgrade but does not manage Agy's internal self-update decision, pin its payload, or guarantee a downgrade after self-update drift.
+Home Manager exports the supported `AGY_CLI_DISABLE_AUTO_UPDATE=true` opt-out, so Agy processes launched from the managed session leave upgrades to Homebrew activation.
+The cask is upgraded greedily against refreshed Homebrew metadata, but a rebuild does not pin its payload or guarantee a downgrade after drift.
+A captain can still re-enable the upstream updater by overriding the environment variable or launching Agy outside the managed session.
 No credentials or Agy authentication files are managed here.
 
 Pi exposes `pi update` and Herdr exposes `herdr update` as explicit self-update commands as well.

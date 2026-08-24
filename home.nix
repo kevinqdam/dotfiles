@@ -19,6 +19,7 @@ in {
   home.homeDirectory = "/Users/kevindam";
 
   home.sessionVariables = {
+    AGY_CLI_DISABLE_AUTO_UPDATE = "true";
     FIRSTMATE_ROOT = "${config.home.homeDirectory}/dev/firstmate";
     FIRSTMATE_HOME = "${config.home.homeDirectory}/.local/share/firstmate";
     # FM_HOME is the one primary operational home. Secondmate launches pass

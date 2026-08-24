@@ -54,7 +54,10 @@
 
     casks = [
       "anaconda"
-      "antigravity-cli"
+      {
+        name = "antigravity-cli";
+        greedy = true;
+      }
       "chatgpt"
       "codex"
       "google-drive"
