@@ -24,18 +24,22 @@ environment=(
   HOMEBREW_NO_INSTALL_CLEANUP=1
   HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
 )
-arguments=(
-  upgrade
-  --greedy
-  --no-ask
-  pi-coding-agent
-  herdr
-  antigravity-cli
-)
 
-if [ "$(id -un)" = "$owner" ]; then
-  env "${environment[@]}" "$brew" "${arguments[@]}"
-else
-  /usr/bin/sudo --preserve-env=PATH --user="$owner" --set-home \
-    env "${environment[@]}" "$brew" "${arguments[@]}"
-fi
+run_brew() {
+  if [ "$(id -un)" = "$owner" ]; then
+    env "${environment[@]}" "$brew" "$@"
+  else
+    /usr/bin/sudo --preserve-env=PATH --user="$owner" --set-home \
+      env "${environment[@]}" "$brew" "$@"
+  fi
+}
+
+# Homebrew owns installation and versioning for these tools. Preserve its
+# diagnostics and exit status so an exceptional pre-existing conflict remains
+# an operator-visible one-time repair instead of becoming package logic here.
+run_brew upgrade \
+  --greedy \
+  --no-ask \
+  pi-coding-agent \
+  herdr \
+  antigravity-cli

@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# Remove only the empty legacy Taps directory that blocks nix-homebrew's
+# declarative Taps link, and preserve its exact managed store symlink state.
+# Everything else fails closed and remains untouched.
+set -euo pipefail
+
+if [ "$#" -ne 4 ]; then
+  printf 'usage: %s <homebrew-library> <homebrew-owner> <managed-symlink-owner> <managed-symlink-group>\n' "$0" >&2
+  exit 2
+fi
+
+library=$1
+owner=$2
+managed_symlink_owner=$3
+managed_symlink_group=$4
+taps="$library/Taps"
+
+refuse() {
+  printf 'nix-homebrew Taps migration: refusing %s: %s\n' "$taps" "$1" >&2
+  exit 1
+}
+
+platform=$(uname -s)
+
+stat_owner() {
+  case "$platform" in
+    Darwin) /usr/bin/stat -f '%u' "$1" 2>/dev/null ;;
+    *) /usr/bin/stat -c '%u' "$1" 2>/dev/null ;;
+  esac
+}
+
+stat_group() {
+  case "$platform" in
+    Darwin) /usr/bin/stat -f '%g' "$1" 2>/dev/null ;;
+    *) /usr/bin/stat -c '%g' "$1" 2>/dev/null ;;
+  esac
+}
+
+stat_mode() {
+  case "$platform" in
+    Darwin) /usr/bin/stat -f '%A' "$1" 2>/dev/null ;;
+    *) /usr/bin/stat -c '%a' "$1" 2>/dev/null ;;
+  esac
+}
+
+group_id() {
+  case "$platform" in
+    Darwin)
+      /usr/bin/dscl . -read "/Groups/$1" 2>/dev/null \
+        | /usr/bin/awk '$1 == "PrimaryGroupID:" { print $2; exit }'
+      ;;
+    *)
+      /usr/bin/getent group "$1" 2>/dev/null \
+        | /usr/bin/awk -F: 'NR == 1 { print $3; exit }'
+      ;;
+  esac
+}
+
+# A missing path is already safe for nix-homebrew and makes repeated
+# activation idempotent. Check -L separately so a dangling symlink is never
+# mistaken for a missing path.
+if [ ! -e "$taps" ] && [ ! -L "$taps" ]; then
+  exit 0
+fi
+
+if [ -L "$taps" ]; then
+  # With mutableTaps disabled, nix-homebrew creates exactly this kind of
+  # symlink. Preserve it on repeated activation, but do not trust a generic
+  # symlink merely because it points into the store.
+  managed_target=$(readlink "$taps") || refuse 'symlink target cannot be inspected'
+  case "$managed_target" in
+    /nix/store/*) ;;
+    *) refuse 'symlink target is not in the Nix store' ;;
+  esac
+  store_entry=${managed_target#/nix/store/}
+  case "$store_entry" in
+    ''|*/*) refuse 'symlink target is not a single Nix store entry' ;;
+    *-taps-env) ;;
+    *) refuse 'symlink target is not a nix-homebrew taps environment' ;;
+  esac
+  store_hash=${store_entry%-taps-env}
+  case "$store_hash" in
+    ''|*[!0-9a-z]*) refuse 'symlink target has an invalid Nix store hash' ;;
+  esac
+  [ "${#store_hash}" -eq 32 ] || refuse 'symlink target has an invalid Nix store hash'
+  if [ ! -d "$managed_target" ] || [ -L "$managed_target" ]; then
+    refuse 'managed symlink target is missing or not an ordinary directory'
+  fi
+
+  managed_uid=$(id -u "$managed_symlink_owner" 2>/dev/null) \
+    || refuse "managed symlink owner cannot be resolved: $managed_symlink_owner"
+  managed_gid=$(group_id "$managed_symlink_group")
+  [ -n "$managed_gid" ] || refuse "managed symlink group cannot be resolved: $managed_symlink_group"
+  actual_uid=$(stat_owner "$taps") || refuse 'symlink owner cannot be inspected'
+  actual_gid=$(stat_group "$taps") || refuse 'symlink group cannot be inspected'
+  if [ "$actual_uid" != "$managed_uid" ] || [ "$actual_gid" != "$managed_gid" ]; then
+    refuse "symlink ownership is ${actual_uid}:${actual_gid}, expected ${managed_uid}:${managed_gid}"
+  fi
+  exit 0
+fi
+
+if [ ! -d "$taps" ]; then
+  refuse 'path is not an ordinary directory'
+fi
+
+owner_uid=$(id -u "$owner" 2>/dev/null) || refuse "owner cannot be resolved: $owner"
+actual_uid=$(stat_owner "$taps") || refuse 'owner cannot be inspected'
+mode=$(stat_mode "$taps") || refuse 'permissions cannot be inspected'
+
+if [ "$actual_uid" != "$owner_uid" ]; then
+  refuse "directory is owned by uid $actual_uid, expected uid $owner_uid"
+fi
+
+# The activation process is privileged, so test the owner permission bits
+# rather than relying on root's access. Read and search are both required to
+# positively establish that the directory can be inspected.
+case "$mode" in
+  ''|*[!0-7]*)
+    refuse 'permissions are ambiguous'
+    ;;
+esac
+while [ "${#mode}" -gt 3 ]; do
+  mode=${mode#?}
+done
+if [ "${#mode}" -ne 3 ]; then
+  refuse 'permissions are ambiguous'
+fi
+owner_mode=${mode%??}
+case "$owner_mode" in
+  4|5|6|7) ;;
+  *) refuse 'directory is not readable and searchable by its owner' ;;
+esac
+
+# Include dot files and broken symlinks. A literal unmatched glob is ignored,
+# while every real child causes a refusal instead of a recursive deletion.
+for child in "$taps"/* "$taps"/.[!.]* "$taps"/..?*; do
+  if [ -e "$child" ] || [ -L "$child" ]; then
+    refuse 'directory is not empty'
+  fi
+done
+
+# rmdir is intentionally the only mutating operation. It refuses if a child
+# appeared since inspection and never follows a symlink as rm -rf would.
+if ! /bin/rmdir "$taps"; then
+  refuse 'directory changed or could not be removed safely'
+fi
+
+printf 'nix-homebrew Taps migration: removed empty legacy directory %s\n' "$taps" >&2

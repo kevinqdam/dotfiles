@@ -1,0 +1,2 @@
+# Repository-owned no-mistakes declaration: this project intentionally has no CI.
+no_ci: true

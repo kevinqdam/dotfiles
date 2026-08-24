@@ -19,6 +19,14 @@ After Bundle completes, activation forces an API metadata refresh and upgrades o
 Other Homebrew formulae and casks are not part of this Firstmate convergence step.
 Identical flake locks can therefore resolve different Pi, Agy, or Herdr versions.
 
+## Homebrew migration boundary
+
+This Apple Silicon configuration manages only the native `/opt/homebrew` prefix.
+`nix-homebrew.enableRosetta = false` deliberately leaves the existing `/usr/local` Homebrew tree, including its taps and package state, untouched.
+Before native nix-homebrew setup, activation removes an ordinary `/opt/homebrew/Library/Taps` directory only when it is empty and owned and searchable by the configured Homebrew user.
+After nix-homebrew creates its root:admin symlink to a single Nix-store `*-taps-env` directory, later activations preserve that exact managed state.
+A non-empty, arbitrary-target, dangling, non-directory, unreadable, wrong-owner, or otherwise ambiguous path fails closed instead of being overwritten.
+
 The current Firstmate installers pin no-mistakes 1.57.0 and Treehouse 2.0.1 to official macOS arm64 release assets with fixed SHA-256 hashes.
 The Nix derivation in `nix/firstmate-toolchain.nix` owns those pins and does not run either upstream installer.
 
@@ -40,7 +48,7 @@ This configuration intentionally keeps the existing Homebrew `antigravity-cli` c
 
 The cask remains declaratively present, but its recipe and payload are not pinned by `flake.lock`, and the upstream CLI advertises automatic updates.
 Home Manager exports the supported `AGY_CLI_DISABLE_AUTO_UPDATE=true` opt-out, so Agy processes launched from the managed session leave upgrades to Homebrew activation.
-The cask is upgraded greedily against refreshed Homebrew metadata, but a rebuild does not pin its payload or guarantee a downgrade after drift.
+The cask is upgraded greedily against refreshed Homebrew metadata by the same targeted Homebrew upgrade as Pi and Herdr. Homebrew owns Agy installation and versioning; activation does not inspect receipts, execute Agy, or repair package conflicts. An exceptional pre-existing conflict remains visible in Homebrew's error output for one-time operator repair.
 A captain can still re-enable the upstream updater by overriding the environment variable or launching Agy outside the managed session.
 No credentials or Agy authentication files are managed here.
 
