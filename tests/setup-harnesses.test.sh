@@ -49,6 +49,8 @@ run_setup_at() {
 
 run_setup
 [ -f "$checkout/README.md" ] || fail 'fresh checkout was not cloned'
+git -C "$checkout" config user.name Test
+git -C "$checkout" config user.email test@example.invalid
 assert_eq "$origin" "$(git -C "$checkout" remote get-url origin)"
 assert_eq "$origin" "$(git -C "$checkout" config --get remote.origin.pushurl)"
 assert_eq "$upstream" "$(git -C "$checkout" remote get-url upstream)"

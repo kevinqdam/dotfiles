@@ -56,26 +56,25 @@ let
     npmBuildScript = "build";
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postInstall = ''
-      install -d "$out/lib/node_modules"
-      cp -R node_modules/. "$out/lib/node_modules/"
+      nodeModules="$out/lib/node_modules/firstmate-axi-toolchain/node_modules"
       install -d "$out/bin"
 
       makeWrapper "${pkgs.nodejs_22}/bin/node" "$out/bin/gh-axi" \
-        --add-flags "$out/lib/node_modules/gh-axi/dist/bin/gh-axi.js" \
-        --set NODE_PATH "$out/lib/node_modules"
+        --add-flags "$nodeModules/gh-axi/dist/bin/gh-axi.js" \
+        --set NODE_PATH "$nodeModules"
       makeWrapper "${pkgs.nodejs_22}/bin/node" "$out/bin/chrome-devtools-axi" \
-        --add-flags "$out/lib/node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi.js" \
-        --set NODE_PATH "$out/lib/node_modules" \
-        --set CHROME_DEVTOOLS_AXI_MCP_PATH "$out/lib/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+        --add-flags "$nodeModules/chrome-devtools-axi/dist/bin/chrome-devtools-axi.js" \
+        --set NODE_PATH "$nodeModules" \
+        --set CHROME_DEVTOOLS_AXI_MCP_PATH "$nodeModules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
       makeWrapper "${pkgs.nodejs_22}/bin/node" "$out/bin/lavish-axi" \
-        --add-flags "$out/lib/node_modules/lavish-axi/dist/cli.mjs" \
-        --set NODE_PATH "$out/lib/node_modules"
+        --add-flags "$nodeModules/lavish-axi/dist/cli.mjs" \
+        --set NODE_PATH "$nodeModules"
       makeWrapper "${pkgs.nodejs_22}/bin/node" "$out/bin/tasks-axi" \
-        --add-flags "$out/lib/node_modules/tasks-axi/dist/bin/tasks-axi.js" \
-        --set NODE_PATH "$out/lib/node_modules"
+        --add-flags "$nodeModules/tasks-axi/dist/bin/tasks-axi.js" \
+        --set NODE_PATH "$nodeModules"
       makeWrapper "${pkgs.nodejs_22}/bin/node" "$out/bin/quota-axi" \
-        --add-flags "$out/lib/node_modules/quota-axi/dist/bin/quota-axi.js" \
-        --set NODE_PATH "$out/lib/node_modules"
+        --add-flags "$nodeModules/quota-axi/dist/bin/quota-axi.js" \
+        --set NODE_PATH "$nodeModules"
     '';
     meta = {
       description = "Pinned Firstmate AXI command-line toolchain";
