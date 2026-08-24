@@ -1,6 +1,19 @@
 { config, lib, pkgs, ... }:
 let
   firstmateToolchain = import ./nix/firstmate-toolchain.nix { inherit pkgs; };
+  firstmateConfigMaterializer = pkgs.stdenv.mkDerivation {
+    pname = "firstmate-config-materializer";
+    version = "1.0.0";
+    src = ./agents/materialize-firstmate-config.c;
+    dontUnpack = true;
+    buildPhase = ''
+      $CC -std=c11 -Wall -Wextra -Werror "$src" -o materialize-firstmate-config
+    '';
+    installPhase = ''
+      install -d "$out/bin"
+      install -m755 materialize-firstmate-config "$out/bin/materialize-firstmate-config"
+    '';
+  };
 in {
   home.username = "kevindam";
   home.homeDirectory = "/Users/kevindam";
@@ -98,9 +111,7 @@ in {
   # activation helper creates only missing regular files and preserves any
   # locally changed regular file in the populated canonical home.
   home.activation.firstmateConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    FIRSTMATE_CONFIG_NODE=${pkgs.nodejs_22}/bin/node \
-      FIRSTMATE_CONFIG_BUDGET_VALIDATOR=${./agents/validate-firstmate-startup-memory-budget.mjs} \
-      ${pkgs.bash}/bin/bash ${./agents/materialize-firstmate-config} \
+    ${firstmateConfigMaterializer}/bin/materialize-firstmate-config \
       "${config.home.homeDirectory}/.local/share/firstmate"
   '';
 

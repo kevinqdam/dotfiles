@@ -3,9 +3,20 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-MATERIALIZER="$SCRIPT_DIR/agents/materialize-firstmate-config"
+MATERIALIZER_SOURCE="$SCRIPT_DIR/agents/materialize-firstmate-config.c"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/firstmate-config-test.XXXXXX")
-trap 'rm -rf "$TMP"' EXIT
+TMP=$(cd "$TMP" && pwd -P)
+MATERIALIZER="$TMP/materialize-firstmate-config"
+stopped_pid=
+
+cleanup() {
+  if [ -n "$stopped_pid" ]; then
+    kill -CONT "$stopped_pid" >/dev/null 2>&1 || true
+    kill "$stopped_pid" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
 
 fail() {
   printf 'firstmate-config.test.sh: %s\n' "$*" >&2
@@ -17,6 +28,42 @@ assert_eq() {
   actual=$2
   [ "$expected" = "$actual" ] || fail "expected '$expected', got '$actual'"
 }
+
+wait_until_stopped() {
+  pid=$1
+  attempt=0
+  while [ "$attempt" -lt 200 ]; do
+    state=$(ps -o state= -p "$pid" 2>/dev/null || true)
+    case "$state" in
+      *T*) return 0 ;;
+    esac
+    kill -0 "$pid" 2>/dev/null || fail 'materializer exited before test hook'
+    sleep 0.01
+    attempt=$((attempt + 1))
+  done
+  fail 'materializer did not reach test hook'
+}
+
+start_hooked() {
+  hook=$1
+  target_home=$2
+  FIRSTMATE_CONFIG_TEST_HOOK="$hook" "$MATERIALIZER" "$target_home" >/dev/null 2>&1 &
+  stopped_pid=$!
+  wait_until_stopped "$stopped_pid"
+}
+
+finish_hooked_failure() {
+  message=$1
+  kill -CONT "$stopped_pid"
+  if wait "$stopped_pid"; then
+    stopped_pid=
+    fail "$message"
+  fi
+  stopped_pid=
+}
+
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -DFIRSTMATE_CONFIG_TESTING \
+  "$MATERIALIZER_SOURCE" -o "$MATERIALIZER"
 
 link_count() {
   path=$1
@@ -87,59 +134,39 @@ for invalid_case in zero leading-zero multiple-lines missing-newline hard-linked
 done
 
 race="$TMP/race"
-race_bin="$TMP/race-bin"
-mkdir -p "$race/config" "$race_bin"
-real_ln=$(command -v ln)
-printf '%s\n' \
-  '#!/usr/bin/env bash' \
-  'if [ "$2" = "$RACE_TARGET" ] && [ ! -e "$2" ]; then' \
-  '  printf "captain-won\\n" > "$2"' \
-  'fi' \
-  'exec "$REAL_LN" "$@"' > "$race_bin/ln"
-chmod +x "$race_bin/ln"
-export REAL_LN="$real_ln"
-export RACE_TARGET="$race/config/backend"
-if PATH="$race_bin:$PATH" "$MATERIALIZER" "$race" >/dev/null 2>&1; then
-  fail 'concurrent target publication did not fail closed'
-fi
-assert_eq 'captain-won' "$(cat "$race/config/backend")"
+mkdir -p "$race/config"
+start_hooked before-publish "$race"
+printf 'captain-won\n' > "$race/config/startup-memory-budget"
+finish_hooked_failure 'concurrent target publication did not fail closed'
+assert_eq 'captain-won' "$(cat "$race/config/startup-memory-budget")"
 
 replacement_race="$TMP/preservation-replacement"
-replacement_hook="$TMP/replace-after-read.cjs"
 mkdir -p "$replacement_race/config"
 printf '9100\n' > "$replacement_race/config/startup-memory-budget"
 printf 'abcd\n' > "$replacement_race/replacement-budget"
-printf '%s\n' \
-  'const fs = require("node:fs");' \
-  'const readFileSync = fs.readFileSync;' \
-  'fs.readFileSync = function (path, ...args) {' \
-  '  const result = readFileSync.call(this, path, ...args);' \
-  '  if (typeof path === "number") {' \
-  '    if (process.env.RACE_MUTATION === "replace") {' \
-  '      fs.renameSync(process.env.RACE_REPLACE_WITH, process.env.RACE_TARGET);' \
-  '    } else {' \
-  '      fs.writeFileSync(process.env.RACE_TARGET, "abcd\n");' \
-  '      fs.utimesSync(process.env.RACE_TARGET, new Date(1), new Date(1));' \
-  '    }' \
-  '  }' \
-  '  return result;' \
-  '};' > "$replacement_hook"
-if NODE_OPTIONS="--require=$replacement_hook" RACE_MUTATION=replace \
-  RACE_REPLACE_WITH="$replacement_race/replacement-budget" \
-  RACE_TARGET="$replacement_race/config/startup-memory-budget" \
-  "$MATERIALIZER" "$replacement_race" >/dev/null 2>&1; then
-  fail 'atomic startup budget replacement did not fail closed'
-fi
+start_hooked before-preserve-boundary "$replacement_race"
+mv "$replacement_race/replacement-budget" "$replacement_race/config/startup-memory-budget"
+finish_hooked_failure 'atomic startup budget replacement did not fail closed'
 assert_eq 'abcd' "$(cat "$replacement_race/config/startup-memory-budget")"
 
 rewrite_race="$TMP/preservation-rewrite"
 mkdir -p "$rewrite_race/config"
 printf '9100\n' > "$rewrite_race/config/startup-memory-budget"
-if NODE_OPTIONS="--require=$replacement_hook" RACE_MUTATION=rewrite \
-  RACE_TARGET="$rewrite_race/config/startup-memory-budget" \
-  "$MATERIALIZER" "$rewrite_race" >/dev/null 2>&1; then
-  fail 'in-place startup budget rewrite did not fail closed'
-fi
+start_hooked before-preserve-boundary "$rewrite_race"
+printf 'abcd\n' > "$rewrite_race/config/startup-memory-budget"
+touch -t 200001010000 "$rewrite_race/config/startup-memory-budget"
+finish_hooked_failure 'in-place startup budget rewrite did not fail closed'
 assert_eq 'abcd' "$(cat "$rewrite_race/config/startup-memory-budget")"
+
+directory_race="$TMP/directory-replacement"
+outside_config="$TMP/outside-config"
+mkdir -p "$directory_race/config" "$outside_config"
+start_hooked after-config-open "$directory_race"
+mv "$directory_race/config" "$directory_race/original-config"
+ln -s "$outside_config" "$directory_race/config"
+finish_hooked_failure 'canonical config directory replacement did not fail closed'
+for name in backend crew-harness crew-dispatch.json startup-memory-budget; do
+  [ ! -e "$outside_config/$name" ] || fail "directory replacement escaped through $name"
+done
 
 printf 'ok - config materialization, validation, preservation, and atomic publication contracts\n'

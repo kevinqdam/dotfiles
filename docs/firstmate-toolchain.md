@@ -51,7 +51,7 @@ Home Manager exports `FM_HOME` and `FIRSTMATE_HOME` to `/Users/kevindam/.local/s
 The Pi bootstrap extension applies the same default when Pi starts directly in the primary Firstmate checkout.
 Secondmate launchers pass explicit `FM_HOME` and `FM_ROOT_OVERRIDE` values, including the intentional empty root override, and the extension preserves those values.
 
-The Home Manager activation hook invokes `agents/materialize-firstmate-config` with the canonical home.
+Home Manager builds the native materializer from `agents/materialize-firstmate-config.c` and invokes it with the canonical home.
 It creates only missing regular files for `config/backend`, `config/crew-harness`, `config/crew-dispatch.json`, and `config/startup-memory-budget`.
 The defaults select Herdr, Pi, the approved Pi model and effort routing, and a 7500-token startup memory budget.
 The Firstmate dispatcher still gives explicit per-task captain `--harness`, `--model`, and `--effort` requests precedence over these defaults.
@@ -60,6 +60,7 @@ A populated home is treated as captain-owned.
 Existing regular config files are left byte-for-byte unchanged, and a captain-selected startup memory budget is preserved only when its first digit is 1 through 9, its remaining characters are decimal digits followed by exactly one newline, and it has one hard link.
 A symlink or other non-regular config target causes activation to fail closed instead of replacing a Home Manager link or an unexpected object.
 Missing settings are published atomically without replacing a target that appears concurrently; that race fails activation and preserves the competing file for review.
+Canonical home and config directories are opened component by component without following symlinks, and all inspection, validation, temporary-file, and publication operations use their held directory descriptors.
 Runtime state, task records, backlog, data, project clones, credentials, and generated monitoring artifacts are never touched by the activation hook.
 
 ## Firstmate checkout remotes
