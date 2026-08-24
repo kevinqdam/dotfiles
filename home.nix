@@ -98,7 +98,9 @@ in {
   # activation helper creates only missing regular files and preserves any
   # locally changed regular file in the populated canonical home.
   home.activation.firstmateConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    ${pkgs.bash}/bin/bash ${./agents/materialize-firstmate-config} \
+    FIRSTMATE_CONFIG_NODE=${pkgs.nodejs_22}/bin/node \
+      FIRSTMATE_CONFIG_BUDGET_VALIDATOR=${./agents/validate-firstmate-startup-memory-budget.mjs} \
+      ${pkgs.bash}/bin/bash ${./agents/materialize-firstmate-config} \
       "${config.home.homeDirectory}/.local/share/firstmate"
   '';
 

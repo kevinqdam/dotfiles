@@ -22,6 +22,9 @@ fi
 
 HOME_DIR=$1
 CONFIG_DIR="$HOME_DIR/config"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+NODE_BIN=${FIRSTMATE_CONFIG_NODE:-node}
+BUDGET_VALIDATOR=${FIRSTMATE_CONFIG_BUDGET_VALIDATOR:-"$SCRIPT_DIR/validate-firstmate-startup-memory-budget.mjs"}
 
 if [ -e "$HOME_DIR" ] || [ -L "$HOME_DIR" ]; then
   [ -d "$HOME_DIR" ] && [ ! -L "$HOME_DIR" ] || {
@@ -94,65 +97,11 @@ invalid_startup_memory_budget() {
 
 validate_startup_memory_budget() {
   path=$1
-  value=
-  remainder=
-
-  if [ -L "$path" ] || [ ! -f "$path" ]; then
-    invalid_startup_memory_budget "$path"
-    return 1
-  fi
-
-  {
-    if ! IFS= read -r value; then
-      invalid_startup_memory_budget "$path"
-      return 1
-    fi
-    if IFS= read -r remainder || [ -n "$remainder" ]; then
-      invalid_startup_memory_budget "$path"
-      return 1
-    fi
-  } < "$path"
-
-  case "$value" in
-    ''|*[!0-9]*)
-      invalid_startup_memory_budget "$path"
-      return 1
-      ;;
-  esac
-  case "$value" in
-    *[1-9]*) ;;
-    *)
-      invalid_startup_memory_budget "$path"
-      return 1
-      ;;
-  esac
-
-  byte_count=$(wc -c < "$path")
-  byte_count=${byte_count//[[:space:]]/}
-  if [ "$byte_count" != "$(( ${#value} + 1 ))" ]; then
-    invalid_startup_memory_budget "$path"
-    return 1
-  fi
-
-  if link_count=$(stat -f '%l' "$path" 2>/dev/null); then
-    :
-  else
-    link_count=$(stat -c '%h' "$path")
-  fi
-  if [ "$link_count" != 1 ]; then
-    invalid_startup_memory_budget "$path"
-    return 1
-  fi
-
-  if [ -L "$path" ] || [ ! -f "$path" ]; then
+  if ! "$NODE_BIN" "$BUDGET_VALIDATOR" "$path"; then
     invalid_startup_memory_budget "$path"
     return 1
   fi
 }
-
-if [ -f "$CONFIG_DIR/startup-memory-budget" ]; then
-  validate_startup_memory_budget "$CONFIG_DIR/startup-memory-budget"
-fi
 
 write_if_absent() {
   name=$1
@@ -168,17 +117,19 @@ write_if_absent() {
     return 1
   fi
   if [ -f "$path" ]; then
-    if printf '%s' "$content" | cmp -s "$path" -; then
-      disposition=unchanged
+    if [ "$name" = startup-memory-budget ]; then
+      validate_startup_memory_budget "$path"
+      disposition='preserved captain-selected'
     else
-      disposition='preserved locally changed'
+      if printf '%s' "$content" | cmp -s "$path" -; then
+        disposition=unchanged
+      else
+        disposition='preserved locally changed'
+      fi
     fi
     if [ -L "$path" ] || [ ! -f "$path" ]; then
       printf 'firstmate-config: target changed during preservation: %s\n' "$path" >&2
       return 1
-    fi
-    if [ "$name" = startup-memory-budget ]; then
-      validate_startup_memory_budget "$path"
     fi
     printf 'firstmate-config: %s %s\n' "$disposition" "$path"
     return 0
@@ -205,7 +156,7 @@ write_if_absent() {
   return 1
 }
 
+write_if_absent startup-memory-budget "$STARTUP_MEMORY_BUDGET"
 write_if_absent backend "$BACKEND"
 write_if_absent crew-harness "$CREW_HARNESS"
 write_if_absent crew-dispatch.json "$CREW_DISPATCH"
-write_if_absent startup-memory-budget "$STARTUP_MEMORY_BUDGET"

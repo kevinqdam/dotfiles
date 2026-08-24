@@ -91,47 +91,39 @@ mkdir -p "$race/config" "$race_bin"
 real_ln=$(command -v ln)
 printf '%s\n' \
   '#!/usr/bin/env bash' \
-  'case "${RACE_ACTION:-}" in' \
-  '  claim-target)' \
-  '    if [ "$2" = "$RACE_TARGET" ] && [ ! -e "$2" ]; then' \
-  '      printf "captain-won\\n" > "$2"' \
-  '    fi' \
-  '    ;;' \
-  '  invalid-budget)' \
-  '    if [ "$2" = "$RACE_TRIGGER" ] && [ ! -e "$RACE_TARGET" ]; then' \
-  '      printf "0\\n" > "$RACE_TARGET"' \
-  '    fi' \
-  '    ;;' \
-  '  symlink-budget)' \
-  '    if [ "$2" = "$RACE_TRIGGER" ] && [ ! -e "$RACE_TARGET" ] && [ ! -L "$RACE_TARGET" ]; then' \
-  '      "$REAL_LN" -s "$RACE_SOURCE" "$RACE_TARGET"' \
-  '    fi' \
-  '    ;;' \
-  'esac' \
+  'if [ "$2" = "$RACE_TARGET" ] && [ ! -e "$2" ]; then' \
+  '  printf "captain-won\\n" > "$2"' \
+  'fi' \
   'exec "$REAL_LN" "$@"' > "$race_bin/ln"
 chmod +x "$race_bin/ln"
 export REAL_LN="$real_ln"
 export RACE_TARGET="$race/config/backend"
-if RACE_ACTION=claim-target PATH="$race_bin:$PATH" "$MATERIALIZER" "$race" >/dev/null 2>&1; then
+if PATH="$race_bin:$PATH" "$MATERIALIZER" "$race" >/dev/null 2>&1; then
   fail 'concurrent target publication did not fail closed'
 fi
 assert_eq 'captain-won' "$(cat "$race/config/backend")"
 
-for race_action in invalid-budget symlink-budget; do
-  preservation_race="$TMP/preservation-$race_action"
-  mkdir -p "$preservation_race/config"
-  printf '9100\n' > "$preservation_race/captain-budget"
-  export RACE_TRIGGER="$preservation_race/config/backend"
-  export RACE_TARGET="$preservation_race/config/startup-memory-budget"
-  export RACE_SOURCE="$preservation_race/captain-budget"
-  if RACE_ACTION="$race_action" PATH="$race_bin:$PATH" "$MATERIALIZER" "$preservation_race" >/dev/null 2>&1; then
-    fail "concurrent $race_action preservation did not fail closed"
-  fi
-  if [ "$race_action" = symlink-budget ]; then
-    [ -L "$RACE_TARGET" ] || fail 'concurrent startup budget symlink was replaced'
-  else
-    assert_eq '0' "$(cat "$RACE_TARGET")"
-  fi
-done
+replacement_race="$TMP/preservation-replacement"
+replacement_hook="$TMP/replace-after-read.cjs"
+mkdir -p "$replacement_race/config"
+printf '9100\n' > "$replacement_race/config/startup-memory-budget"
+printf 'abcd\n' > "$replacement_race/replacement-budget"
+printf '%s\n' \
+  'const fs = require("node:fs");' \
+  'const readFileSync = fs.readFileSync;' \
+  'fs.readFileSync = function (path, ...args) {' \
+  '  const result = readFileSync.call(this, path, ...args);' \
+  '  if (typeof path === "number") {' \
+  '    fs.renameSync(process.env.RACE_REPLACE_WITH, process.env.RACE_REPLACE_TARGET);' \
+  '  }' \
+  '  return result;' \
+  '};' > "$replacement_hook"
+if NODE_OPTIONS="--require=$replacement_hook" \
+  RACE_REPLACE_WITH="$replacement_race/replacement-budget" \
+  RACE_REPLACE_TARGET="$replacement_race/config/startup-memory-budget" \
+  "$MATERIALIZER" "$replacement_race" >/dev/null 2>&1; then
+  fail 'atomic startup budget replacement did not fail closed'
+fi
+assert_eq 'abcd' "$(cat "$replacement_race/config/startup-memory-budget")"
 
 printf 'ok - config materialization, validation, preservation, and atomic publication contracts\n'
