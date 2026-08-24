@@ -1,4 +1,4 @@
-{ lib, pkgs, ... }: {
+{ config, lib, pkgs, ... }: {
   nix.enable = false;
 
   # Necessary for using flakes on this system.
@@ -34,7 +34,7 @@
       # The locked nix-homebrew brew source is the update boundary. Do not
       # replace it with a mutable Homebrew update during activation.
       autoUpdate = false;
-      upgrade = true;
+      upgrade = false;
       cleanup = "none";
       extraEnv.HOMEBREW_FORCE_API_AUTO_UPDATE = "1";
     };
@@ -71,4 +71,10 @@
       "visual-studio-code"
     ];
   };
+
+  system.activationScripts.postActivation.text = lib.mkAfter ''
+    ${./agents/converge-firstmate-homebrew} \
+      ${lib.escapeShellArg "${config.homebrew.prefix}/bin/brew"} \
+      ${lib.escapeShellArg config.homebrew.user}
+  '';
 }
