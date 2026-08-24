@@ -67,11 +67,12 @@ fi
 [ -L "$conflict/config/backend" ] || fail 'symlink conflict was replaced'
 assert_eq '../backend-target' "$(readlink "$conflict/config/backend")"
 
-for invalid_case in zero multiple-lines missing-newline hard-linked; do
+for invalid_case in zero leading-zero multiple-lines missing-newline hard-linked; do
   invalid="$TMP/invalid-$invalid_case"
   mkdir -p "$invalid/config"
   case "$invalid_case" in
     zero) printf '0\n' > "$invalid/config/startup-memory-budget" ;;
+    leading-zero) printf '0001\n' > "$invalid/config/startup-memory-budget" ;;
     multiple-lines) printf '9000\n9100\n' > "$invalid/config/startup-memory-budget" ;;
     missing-newline) printf '9000' > "$invalid/config/startup-memory-budget" ;;
     hard-linked)
@@ -114,16 +115,31 @@ printf '%s\n' \
   'fs.readFileSync = function (path, ...args) {' \
   '  const result = readFileSync.call(this, path, ...args);' \
   '  if (typeof path === "number") {' \
-  '    fs.renameSync(process.env.RACE_REPLACE_WITH, process.env.RACE_REPLACE_TARGET);' \
+  '    if (process.env.RACE_MUTATION === "replace") {' \
+  '      fs.renameSync(process.env.RACE_REPLACE_WITH, process.env.RACE_TARGET);' \
+  '    } else {' \
+  '      fs.writeFileSync(process.env.RACE_TARGET, "abcd\n");' \
+  '      fs.utimesSync(process.env.RACE_TARGET, new Date(1), new Date(1));' \
+  '    }' \
   '  }' \
   '  return result;' \
   '};' > "$replacement_hook"
-if NODE_OPTIONS="--require=$replacement_hook" \
+if NODE_OPTIONS="--require=$replacement_hook" RACE_MUTATION=replace \
   RACE_REPLACE_WITH="$replacement_race/replacement-budget" \
-  RACE_REPLACE_TARGET="$replacement_race/config/startup-memory-budget" \
+  RACE_TARGET="$replacement_race/config/startup-memory-budget" \
   "$MATERIALIZER" "$replacement_race" >/dev/null 2>&1; then
   fail 'atomic startup budget replacement did not fail closed'
 fi
 assert_eq 'abcd' "$(cat "$replacement_race/config/startup-memory-budget")"
+
+rewrite_race="$TMP/preservation-rewrite"
+mkdir -p "$rewrite_race/config"
+printf '9100\n' > "$rewrite_race/config/startup-memory-budget"
+if NODE_OPTIONS="--require=$replacement_hook" RACE_MUTATION=rewrite \
+  RACE_TARGET="$rewrite_race/config/startup-memory-budget" \
+  "$MATERIALIZER" "$rewrite_race" >/dev/null 2>&1; then
+  fail 'in-place startup budget rewrite did not fail closed'
+fi
+assert_eq 'abcd' "$(cat "$rewrite_race/config/startup-memory-budget")"
 
 printf 'ok - config materialization, validation, preservation, and atomic publication contracts\n'

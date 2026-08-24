@@ -57,7 +57,7 @@ The defaults select Herdr, Pi, the approved Pi model and effort routing, and a 7
 The Firstmate dispatcher still gives explicit per-task captain `--harness`, `--model`, and `--effort` requests precedence over these defaults.
 
 A populated home is treated as captain-owned.
-Existing regular config files are left byte-for-byte unchanged, and a captain-selected startup memory budget is preserved only when it is a positive decimal integer terminated by exactly one newline and has one hard link.
+Existing regular config files are left byte-for-byte unchanged, and a captain-selected startup memory budget is preserved only when its first digit is 1 through 9, its remaining characters are decimal digits followed by exactly one newline, and it has one hard link.
 A symlink or other non-regular config target causes activation to fail closed instead of replacing a Home Manager link or an unexpected object.
 Missing settings are published atomically without replacing a target that appears concurrently; that race fails activation and preserves the competing file for review.
 Runtime state, task records, backlog, data, project clones, credentials, and generated monitoring artifacts are never touched by the activation hook.
@@ -66,7 +66,7 @@ Runtime state, task records, backlog, data, project clones, credentials, and gen
 
 `agents/setup-harnesses` uses `git@github.com:kevinqdam/firstmate-local.git` as `origin` and `https://github.com/kunchenguid/firstmate.git` as the fetch-only `upstream`.
 A fresh machine clones the private mirror.
-An existing clean checkout is fetched from the private mirror and advanced only with `git merge --ff-only`.
-Uncommitted changes and a non-fast-forward divergence are preserved and refuse the update.
+An existing clean checkout on the configured branch is fetched from the private mirror and advanced only with `git merge --ff-only`.
+Uncommitted changes, a detached HEAD, a different checked-out branch, and a non-fast-forward divergence are preserved and refuse the update.
 The upstream push URL is a deliberately unusable `no_push://` transport, so an accidental public push fails before network submission.
 A one-time migration of an existing public-origin checkout changes only its remote configuration and then follows the same clean fast-forward gate.

@@ -54,15 +54,18 @@ else
     printf 'setup-harnesses: Firstmate has uncommitted changes; refusing to update: %s\n' "$firstmate_root" >&2
     exit 1
   fi
+  if ! current_branch=$(git -C "$firstmate_root" symbolic-ref --quiet --short HEAD); then
+    printf 'setup-harnesses: Firstmate has a detached HEAD; refusing to update: %s\n' "$firstmate_root" >&2
+    exit 1
+  fi
+  if [[ "$current_branch" != "$branch" ]]; then
+    printf 'setup-harnesses: Firstmate is on branch %s, expected %s; refusing to update: %s\n' \
+      "$current_branch" "$branch" "$firstmate_root" >&2
+    exit 1
+  fi
 
   configure_remotes
   git -C "$firstmate_root" fetch --prune origin "$branch"
-
-  if git -C "$firstmate_root" show-ref --verify --quiet "refs/heads/$branch"; then
-    git -C "$firstmate_root" checkout --quiet "$branch"
-  else
-    git -C "$firstmate_root" checkout --quiet -b "$branch" --track "origin/$branch"
-  fi
   git -C "$firstmate_root" merge --ff-only "origin/$branch"
 fi
 

@@ -35,7 +35,12 @@ git -C "$seed" remote add origin "$origin"
 git -C "$seed" push -u origin main >/dev/null
 
 run_setup() {
-  FIRSTMATE_ROOT="$checkout" \
+  run_setup_at "$checkout"
+}
+
+run_setup_at() {
+  root=$1
+  FIRSTMATE_ROOT="$root" \
   FIRSTMATE_ORIGIN_URL="$origin" \
   FIRSTMATE_UPSTREAM_URL="$upstream" \
   FIRSTMATE_BRANCH=main \
@@ -75,10 +80,44 @@ if run_setup; then
 fi
 assert_eq "$local_head" "$(git -C "$checkout" rev-parse HEAD)"
 
+detached_checkout="$TMP/detached-checkout"
+git clone --branch main "$origin" "$detached_checkout" >/dev/null
+git -C "$detached_checkout" config user.name Test
+git -C "$detached_checkout" config user.email test@example.invalid
+git -C "$detached_checkout" checkout --detach >/dev/null
+printf 'detached commit\n' >> "$detached_checkout/README.md"
+git -C "$detached_checkout" add README.md
+git -C "$detached_checkout" commit -m detached-commit >/dev/null
+detached_head=$(git -C "$detached_checkout" rev-parse HEAD)
+if run_setup_at "$detached_checkout"; then
+  fail 'detached checkout was updated instead of refusing'
+fi
+assert_eq "$detached_head" "$(git -C "$detached_checkout" rev-parse HEAD)"
+if git -C "$detached_checkout" symbolic-ref --quiet HEAD >/dev/null; then
+  fail 'detached checkout was switched to a branch'
+fi
+git -C "$detached_checkout" cat-file -e "$detached_head^{commit}"
+
+off_target_checkout="$TMP/off-target-checkout"
+git clone --branch main "$origin" "$off_target_checkout" >/dev/null
+git -C "$off_target_checkout" config user.name Test
+git -C "$off_target_checkout" config user.email test@example.invalid
+git -C "$off_target_checkout" checkout -b captain-work >/dev/null
+printf 'off-target commit\n' >> "$off_target_checkout/README.md"
+git -C "$off_target_checkout" add README.md
+git -C "$off_target_checkout" commit -m off-target-commit >/dev/null
+off_target_head=$(git -C "$off_target_checkout" rev-parse HEAD)
+if run_setup_at "$off_target_checkout"; then
+  fail 'off-target checkout was updated instead of refusing'
+fi
+assert_eq 'captain-work' "$(git -C "$off_target_checkout" branch --show-current)"
+assert_eq "$off_target_head" "$(git -C "$off_target_checkout" rev-parse HEAD)"
+git -C "$off_target_checkout" cat-file -e "$off_target_head^{commit}"
+
 printf 'uncommitted\n' >> "$checkout/README.md"
 if run_setup; then
   fail 'dirty checkout was updated instead of refusing'
 fi
 assert_eq "$local_head" "$(git -C "$checkout" rev-parse HEAD)"
 
-printf 'ok - setup-harnesses clone, read-only upstream, fast-forward, and refusal contracts\n'
+printf 'ok - setup-harnesses clone, read-only upstream, fast-forward, branch, and refusal contracts\n'
