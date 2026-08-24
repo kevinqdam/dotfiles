@@ -48,7 +48,7 @@ This configuration intentionally keeps the existing Homebrew `antigravity-cli` c
 
 The cask remains declaratively present, but its recipe and payload are not pinned by `flake.lock`, and the upstream CLI advertises automatic updates.
 Home Manager exports the supported `AGY_CLI_DISABLE_AUTO_UPDATE=true` opt-out, so Agy processes launched from the managed session leave upgrades to Homebrew activation.
-The cask is upgraded greedily against refreshed Homebrew metadata, but a rebuild does not pin its payload or guarantee a downgrade after drift.
+The cask is upgraded greedily against refreshed Homebrew metadata by the same targeted Homebrew upgrade as Pi and Herdr. Homebrew owns Agy installation and versioning; activation does not inspect receipts, execute Agy, or repair package conflicts. An exceptional pre-existing conflict remains visible in Homebrew's error output for one-time operator repair.
 A captain can still re-enable the upstream updater by overriding the environment variable or launching Agy outside the managed session.
 No credentials or Agy authentication files are managed here.
 
