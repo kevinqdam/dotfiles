@@ -1,31 +1,72 @@
 #!/usr/bin/env bash
+# Keep the local Firstmate checkout on the private mirror while retaining the
+# public repository as a fetch-only reference. Existing checkouts advance only
+# through a fast-forward from origin.
 set -euo pipefail
 
 firstmate_root="${FIRSTMATE_ROOT:-$HOME/dev/firstmate}"
+origin_url="${FIRSTMATE_ORIGIN_URL:-git@github.com:kevinqdam/firstmate-local.git}"
 upstream_url="${FIRSTMATE_UPSTREAM_URL:-https://github.com/kunchenguid/firstmate.git}"
 branch="${FIRSTMATE_BRANCH:-main}"
+readonly upstream_push_block="no_push://public-upstream-disabled"
 
-if [[ -e "$firstmate_root" && ! -d "$firstmate_root/.git" ]]; then
-  printf 'setup-harnesses: refusing non-Git Firstmate path: %s\n' "$firstmate_root" >&2
+if [[ -e "$firstmate_root" && ! -d "$firstmate_root" ]]; then
+  printf 'setup-harnesses: Firstmate path is not a directory: %s\n' "$firstmate_root" >&2
   exit 1
 fi
 
-if [[ ! -d "$firstmate_root/.git" ]]; then
+ensure_fetch_refspec() {
+  local remote=$1
+  local refspec='+refs/heads/*:refs/remotes/'"$remote"'/*'
+  if ! git -C "$firstmate_root" config --get-all "remote.$remote.fetch" 2>/dev/null \
+    | grep -Fqx "$refspec"; then
+    git -C "$firstmate_root" config --add "remote.$remote.fetch" "$refspec"
+  fi
+}
+
+configure_remotes() {
+  if git -C "$firstmate_root" remote get-url origin >/dev/null 2>&1; then
+    git -C "$firstmate_root" config --replace-all remote.origin.url "$origin_url"
+  else
+    git -C "$firstmate_root" remote add origin "$origin_url"
+  fi
+  git -C "$firstmate_root" config --replace-all remote.origin.pushurl "$origin_url"
+  ensure_fetch_refspec origin
+
+  if git -C "$firstmate_root" remote get-url upstream >/dev/null 2>&1; then
+    git -C "$firstmate_root" config --replace-all remote.upstream.url "$upstream_url"
+  else
+    git -C "$firstmate_root" remote add upstream "$upstream_url"
+  fi
+  # A deliberately unusable push transport makes the public remote read-only
+  # even when somebody later invokes git push with the wrong remote name.
+  git -C "$firstmate_root" config --replace-all remote.upstream.pushurl "$upstream_push_block"
+  ensure_fetch_refspec upstream
+}
+
+if [[ ! -e "$firstmate_root/.git" ]]; then
   mkdir -p "$(dirname "$firstmate_root")"
-  git clone --branch "$branch" "$upstream_url" "$firstmate_root"
+  git clone --origin origin --branch "$branch" "$origin_url" "$firstmate_root"
+  configure_remotes
 else
+  git -C "$firstmate_root" rev-parse --is-inside-work-tree >/dev/null
   if [[ -n "$(git -C "$firstmate_root" status --porcelain)" ]]; then
     printf 'setup-harnesses: Firstmate has uncommitted changes; refusing to update: %s\n' "$firstmate_root" >&2
     exit 1
   fi
-
-  if ! git -C "$firstmate_root" remote get-url upstream >/dev/null 2>&1; then
-    git -C "$firstmate_root" remote add upstream "$upstream_url"
+  if ! current_branch=$(git -C "$firstmate_root" symbolic-ref --quiet --short HEAD); then
+    printf 'setup-harnesses: Firstmate has a detached HEAD; refusing to update: %s\n' "$firstmate_root" >&2
+    exit 1
+  fi
+  if [[ "$current_branch" != "$branch" ]]; then
+    printf 'setup-harnesses: Firstmate is on branch %s, expected %s; refusing to update: %s\n' \
+      "$current_branch" "$branch" "$firstmate_root" >&2
+    exit 1
   fi
 
-  git -C "$firstmate_root" fetch --prune upstream "$branch"
-  git -C "$firstmate_root" checkout "$branch" >/dev/null 2>&1
-  git -C "$firstmate_root" merge --ff-only "upstream/$branch"
+  configure_remotes
+  git -C "$firstmate_root" fetch --prune origin "$branch"
+  git -C "$firstmate_root" merge --ff-only "origin/$branch"
 fi
 
 printf 'Firstmate ready at %s (%s)\n' "$firstmate_root" "$(git -C "$firstmate_root" rev-parse --short HEAD)"

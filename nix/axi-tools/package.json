@@ -1,0 +1,17 @@
+{
+  "name": "firstmate-axi-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned Firstmate AXI command-line toolchain",
+  "dependencies": {
+    "chrome-devtools-axi": "0.1.29",
+    "chrome-devtools-mcp": "1.7.0",
+    "gh-axi": "0.1.33",
+    "lavish-axi": "0.1.57",
+    "quota-axi": "0.1.30",
+    "tasks-axi": "0.2.5"
+  },
+  "scripts": {
+    "build": "true"
+  }
+}

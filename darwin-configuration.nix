@@ -1,4 +1,4 @@
-{ lib, pkgs, ... }: {
+{ config, lib, pkgs, ... }: {
   nix.enable = false;
 
   # Necessary for using flakes on this system.
@@ -31,9 +31,12 @@
   homebrew = {
     enable = true;
     onActivation = {
-      autoUpdate = true;
-      upgrade = true;
-      cleanup = "zap";
+      # The locked nix-homebrew brew source is the update boundary. Do not
+      # replace it with a mutable Homebrew update during activation.
+      autoUpdate = false;
+      upgrade = false;
+      cleanup = "none";
+      extraEnv.HOMEBREW_FORCE_API_AUTO_UPDATE = "1";
     };
     
     taps = [
@@ -51,10 +54,14 @@
 
     casks = [
       "anaconda"
-      "antigravity-cli"
+      {
+        name = "antigravity-cli";
+        greedy = true;
+      }
       "chatgpt"
       "codex"
       "google-drive"
+      "google-chrome"
       "google-gemini"
       "iterm2"
       "logitune"
@@ -64,4 +71,10 @@
       "visual-studio-code"
     ];
   };
+
+  system.activationScripts.postActivation.text = lib.mkAfter ''
+    ${./agents/converge-firstmate-homebrew} \
+      ${lib.escapeShellArg "${config.homebrew.prefix}/bin/brew"} \
+      ${lib.escapeShellArg config.homebrew.user}
+  '';
 }

@@ -41,6 +41,7 @@
             enableRosetta = true;
             user = username;
             autoMigrate = true;
+            mutableTaps = false;
           };
         }
       ];

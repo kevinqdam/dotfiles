@@ -1,10 +1,30 @@
-{ config, pkgs, ... }: {
+{ config, lib, pkgs, ... }:
+let
+  firstmateToolchain = import ./nix/firstmate-toolchain.nix { inherit pkgs; };
+  firstmateConfigMaterializer = pkgs.stdenv.mkDerivation {
+    pname = "firstmate-config-materializer";
+    version = "1.0.0";
+    src = ./agents/materialize-firstmate-config.c;
+    dontUnpack = true;
+    buildPhase = ''
+      $CC -std=c11 -Wall -Wextra -Werror "$src" -o materialize-firstmate-config
+    '';
+    installPhase = ''
+      install -d "$out/bin"
+      install -m755 materialize-firstmate-config "$out/bin/materialize-firstmate-config"
+    '';
+  };
+in {
   home.username = "kevindam";
   home.homeDirectory = "/Users/kevindam";
 
   home.sessionVariables = {
+    AGY_CLI_DISABLE_AUTO_UPDATE = "true";
     FIRSTMATE_ROOT = "${config.home.homeDirectory}/dev/firstmate";
     FIRSTMATE_HOME = "${config.home.homeDirectory}/.local/share/firstmate";
+    # FM_HOME is the one primary operational home. Secondmate launches pass
+    # their own FM_HOME explicitly and therefore retain their isolated homes.
+    FM_HOME = "${config.home.homeDirectory}/.local/share/firstmate";
   };
 
   # Packages that should be installed to the user profile.
@@ -20,6 +40,7 @@
     gh
     git
     gnupg
+    jq
     gobject-introspection
     htop
     libtool
@@ -31,6 +52,11 @@
     tldr
     tmux
     tree
+    actionlint
+    shellcheck
+    firstmateToolchain.axiTools
+    firstmateToolchain.noMistakes
+    firstmateToolchain.treehouse
   ];
 
   programs.git = {
@@ -81,6 +107,14 @@
 
   # Link AGENTS.md to AntiGravity CLI dir
   home.file.".gemini/antigravity-cli/agents.md".source = ./AGENTS.md;
+
+  # These are captain-owned operational settings, not Home Manager links. The
+  # activation helper creates only missing regular files and preserves any
+  # locally changed regular file in the populated canonical home.
+  home.activation.firstmateConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    ${firstmateConfigMaterializer}/bin/materialize-firstmate-config \
+      "${config.home.homeDirectory}/.local/share/firstmate"
+  '';
 
   # Global Pi integration. It is inert until /firstmate is invoked.
   home.file.".pi/agent/extensions/firstmate-bootstrap.ts".source = ./agents/pi/extensions/firstmate-bootstrap.ts;
