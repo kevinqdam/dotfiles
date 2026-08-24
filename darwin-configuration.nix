@@ -58,6 +58,7 @@
       "chatgpt"
       "codex"
       "google-drive"
+      "google-chrome"
       "google-gemini"
       "iterm2"
       "logitune"

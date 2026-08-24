@@ -22,8 +22,10 @@ The Nix derivation in `nix/firstmate-toolchain.nix` owns those pins and does not
 
 The supported npm surfaces for the AXI tools are `npm install -g` and, where documented, an explicit `setup hooks` command.
 This configuration does not use global npm state.
-It installs gh-axi 0.1.33, chrome-devtools-axi 0.1.29, lavish-axi 0.1.57, tasks-axi 0.2.5, and quota-axi 0.1.30 through one Nix `buildNpmPackage` derivation.
+It installs gh-axi 0.1.33, chrome-devtools-axi 0.1.29, chrome-devtools-mcp 1.7.0, lavish-axi 0.1.57, tasks-axi 0.2.5, and quota-axi 0.1.30 through one Nix `buildNpmPackage` derivation.
 `nix/axi-tools/package-lock.json` and its fixed npm dependency hash pin the complete dependency closure.
+The chrome-devtools-axi wrapper points directly to the pinned MCP entry in its Nix store closure, so browser commands never fall back to `npx` downloads.
+The Homebrew-managed Google Chrome cask supplies the supported stable browser on a fresh Mac and follows the documented mutable Homebrew metadata boundary.
 The command-line tools remain available on PATH without running a mutable global setup command.
 
 The versions meet the Firstmate floors in `docs/configuration.md` of the authoritative Firstmate checkout.

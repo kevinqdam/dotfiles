@@ -5,6 +5,7 @@
   "description": "Pinned Firstmate AXI command-line toolchain",
   "dependencies": {
     "chrome-devtools-axi": "0.1.29",
+    "chrome-devtools-mcp": "1.7.0",
     "gh-axi": "0.1.33",
     "lavish-axi": "0.1.57",
     "quota-axi": "0.1.30",

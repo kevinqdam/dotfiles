@@ -52,7 +52,7 @@ let
     version = "2026-08-23";
     src = ./axi-tools;
     nodejs = pkgs.nodejs_22;
-    npmDepsHash = "sha256-UjYi2ucucX5ouOAseAc+cD4sx1ZP0mnpZfiIbJKwb1U=";
+    npmDepsHash = "sha256-S/XwdHQYIlYzG5s+WC06I2X+H2BCpTAqbvkhV5yzTJY=";
     npmBuildScript = "build";
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postInstall = ''
@@ -65,7 +65,8 @@ let
         --set NODE_PATH "$out/lib/node_modules"
       makeWrapper "${pkgs.nodejs_22}/bin/node" "$out/bin/chrome-devtools-axi" \
         --add-flags "$out/lib/node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi.js" \
-        --set NODE_PATH "$out/lib/node_modules"
+        --set NODE_PATH "$out/lib/node_modules" \
+        --set CHROME_DEVTOOLS_AXI_MCP_PATH "$out/lib/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
       makeWrapper "${pkgs.nodejs_22}/bin/node" "$out/bin/lavish-axi" \
         --add-flags "$out/lib/node_modules/lavish-axi/dist/cli.mjs" \
         --set NODE_PATH "$out/lib/node_modules"
