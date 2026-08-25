@@ -88,6 +88,10 @@ jq -e '.version == "0.39.2"' "$agent_dir/installed/package.json" >/dev/null
 run_converger
 assert_eq 'install npm:@llblab/pi-telegram@0.39.2' "$(cat "$calls")"
 
+printf '%s\n' 'npm:@llblab/pi-telegram@0.39.2 (filtered)' > "$agent_dir/package-source"
+run_converger
+assert_eq 'install npm:@llblab/pi-telegram@0.39.2' "$(cat "$calls")"
+
 # A stale configured source and package are repaired to the pinned version.
 printf '%s\n' 'npm:@llblab/pi-telegram@0.39.1' > "$agent_dir/package-source"
 printf '%s\n' '{"name":"@llblab/pi-telegram","version":"0.39.1"}' > "$agent_dir/installed/package.json"

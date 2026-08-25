@@ -31,7 +31,7 @@ list_output=$(PI_CODING_AGENT_DIR="$agent_dir" "$pi" list)
 installed_path=$(
   printf '%s\n' "$list_output" |
     "$awk_bin" -v spec="$source_spec" '
-      $0 == "  " spec { package_seen = 1; next }
+      $0 == "  " spec || $0 == "  " spec " (filtered)" { package_seen = 1; next }
       package_seen && $0 ~ /^    / { print substr($0, 5); exit }
       package_seen { package_seen = 0 }
     '
