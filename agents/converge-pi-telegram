@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -ne 2 ]; then
+  printf 'usage: %s <pi-executable> <agent-directory>\n' "$0" >&2
+  exit 2
+fi
+
+pi=$1
+agent_dir=$2
+source_spec='npm:@llblab/pi-telegram@0.39.2'
+package_version='0.39.2'
+
+if [ ! -x "$pi" ]; then
+  printf 'pi-telegram: Pi executable is unavailable: %s\n' "$pi" >&2
+  exit 1
+fi
+
+# Let Pi remain the owner of settings.json and its package storage. The list
+# command provides the package identity and installed path without inspecting
+# secrets or Telegram runtime state.
+list_output=$(PI_CODING_AGENT_DIR="$agent_dir" "$pi" list)
+installed_path=$(
+  printf '%s\n' "$list_output" |
+    awk -v spec="$source_spec" '
+      $0 == "  " spec { package_seen = 1; next }
+      package_seen && $0 ~ /^    / { print substr($0, 5); exit }
+      package_seen { package_seen = 0 }
+    '
+)
+
+if [ -n "$installed_path" ] && [ -f "$installed_path/package.json" ]; then
+  installed_version=$(jq -r '.version // empty' "$installed_path/package.json" 2>/dev/null || true)
+  if [ "$installed_version" = "$package_version" ]; then
+    printf 'pi-telegram: %s is already converged\n' "$source_spec"
+    exit 0
+  fi
+fi
+
+PI_CODING_AGENT_DIR="$agent_dir" "$pi" install "$source_spec"
