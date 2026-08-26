@@ -116,6 +116,17 @@ in {
       "${config.home.homeDirectory}/.local/share/firstmate"
   '';
 
+  # Homebrew installs Pi before Home Manager activation. Let Pi own its
+  # ordinary-writable package settings and storage; do not link connector
+  # configuration or runtime state into the declarative profile.
+  home.activation.piTelegramPackage = lib.hm.dag.entryAfter [ "firstmateConfig" ] ''
+    PATH="/opt/homebrew/bin:${pkgs.nodejs_22}/bin:${pkgs.jq}/bin:$PATH"
+    export PATH
+    ${./agents/converge-pi-telegram} \
+      "/opt/homebrew/bin/pi" \
+      "${config.home.homeDirectory}/.pi/agent"
+  '';
+
   # Global Pi integration. It is inert until /firstmate is invoked.
   home.file.".pi/agent/extensions/firstmate-bootstrap.ts".source = ./agents/pi/extensions/firstmate-bootstrap.ts;
   home.file.".local/bin/setup-harnesses".source = ./agents/setup-harnesses;

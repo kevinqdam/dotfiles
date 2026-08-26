@@ -19,6 +19,14 @@ After Bundle completes, activation forces an API metadata refresh and upgrades o
 Other Homebrew formulae and casks are not part of this Firstmate convergence step.
 Identical flake locks can therefore resolve different Pi, Agy, or Herdr versions.
 
+## Pi Telegram mobile adapter
+
+Home Manager converges the reviewed Pi package `npm:@llblab/pi-telegram@0.39.2` through Pi's package manager after Homebrew has installed Pi. The published package describes itself as a Telegram runtime adapter for Pi, requires Node `>=22.19.0`, and declares Pi peer floors of `>=0.80.6`; the Homebrew Pi toolchain satisfies that floor. The exact npm version is pinned so package updates do not move this connector implicitly.
+
+Activation manages only the package source and its ordinary-writable Pi package installation. It does not create or link Telegram configuration, bot tokens, account identifiers, pairing state, message history, or connector runtime files. Those remain local captain-owned runtime artifacts outside the repository and declarative configuration.
+
+After activation, the captain must start Pi locally and complete `/telegram-setup`, then `/telegram-connect`, then open the bot DM on the phone and send `/start`. Never commit the BotFather token or any generated Telegram runtime state.
+
 ## Homebrew migration boundary
 
 This Apple Silicon configuration manages only the native `/opt/homebrew` prefix.
