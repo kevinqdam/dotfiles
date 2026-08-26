@@ -1,7 +1,7 @@
 # Pi capabilities
 
 Home Manager invokes `agents/converge-pi-packages` after Homebrew installs the
-pinned Pi 0.84.3 executable. The converger owns only these reviewed package
+reviewed Pi 0.84.3 executable. The converger owns only these reviewed package
 sources and leaves Pi settings, package state, credentials, sessions, and
 runtime files writable by the captain.
 

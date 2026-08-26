@@ -174,6 +174,23 @@ expected_install_path() {
   esac
 }
 
+expected_extension_path() {
+  source_spec=$1
+  package_path=$(expected_install_path "$source_spec")
+  case "$source_spec" in
+    git:github.com/algal/pi-openai-server-compaction@*)
+      printf '%s\n' "$package_path/src/index.ts"
+      ;;
+    npm:*)
+      printf '%s\n' "$package_path/index.ts"
+      ;;
+    *)
+      printf 'pi-packages: unknown reviewed package source: %s\n' "$source_spec" >&2
+      return 1
+      ;;
+  esac
+}
+
 manifest_matches() {
   package_path=$1
   expected_name=$2
@@ -201,8 +218,9 @@ package_is_converged() {
   list_output=$1
   source_spec=$2
   expected_path=$(expected_install_path "$source_spec")
+  expected_extension=$(expected_extension_path "$source_spec")
   effective_state=$("$node_bin" "$effective_state_checker" \
-    "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "$expected_path/index.ts") || return 1
+    "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "$expected_extension") || return 1
   package_identity_configured=$(printf '%s\n' "$effective_state" |
     "$jq_bin" -r '.identityConfigured') || return 1
   package_path=$(installed_path_for_source "$list_output" "$source_spec" "$expected_path")

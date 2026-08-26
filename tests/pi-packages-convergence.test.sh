@@ -77,10 +77,15 @@ write_manifest() {
   package_path=$1
   package_name=$2
   package_version=$3
+  extension_entry=${4:-./index.ts}
+  extension_file=${extension_entry#./}
   /bin/mkdir -p "$package_path"
-  printf '{"name":"%s","version":"%s","pi":{"extensions":["./index.ts"]}}\n' \
-    "$package_name" "$package_version" > "$package_path/package.json"
-  printf '%s\n' 'export default function extension() {}' > "$package_path/index.ts"
+  case "$extension_file" in
+    */*) /bin/mkdir -p "$package_path/${extension_file%/*}" ;;
+  esac
+  printf '{"name":"%s","version":"%s","pi":{"extensions":["%s"]}}\n' \
+    "$package_name" "$package_version" "$extension_entry" > "$package_path/package.json"
+  printf '%s\n' 'export default function extension() {}' > "$package_path/$extension_file"
 }
 
 replace_configured_source() {
@@ -161,7 +166,7 @@ case "${1:-}" in
       git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055)
         replace_configured_source "$source_spec"
         package_path=$(package_path "$source_spec")
-        write_manifest "$package_path" 'pi-openai-server-compaction' '0.1.0'
+        write_manifest "$package_path" 'pi-openai-server-compaction' '0.1.0' './src/index.ts'
         printf '%s\n' 'c6d593087709e9481223dc6c6c2269b371b5e055' > "$package_path/.head"
         ;;
       *)
@@ -249,6 +254,8 @@ jq -e '.name == "@ryan_nookpi/pi-extension-codex-fast-mode" and .version == "0.2
   "$agent_dir/npm/node_modules/@ryan_nookpi/pi-extension-codex-fast-mode/package.json" >/dev/null
 jq -e '.name == "pi-openai-server-compaction" and .version == "0.1.0"' \
   "$agent_dir/git/github.com/algal/pi-openai-server-compaction/package.json" >/dev/null
+[ -f "$agent_dir/git/github.com/algal/pi-openai-server-compaction/src/index.ts" ] \
+  || fail 'compaction extension entry point was not installed'
 assert_eq 'c6d593087709e9481223dc6c6c2269b371b5e055' \
   "$(cat "$agent_dir/git/github.com/algal/pi-openai-server-compaction/.head")"
 [ -e "$agent_dir/telegram.json" ] || fail 'Telegram config disappeared during fresh convergence'
