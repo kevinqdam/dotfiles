@@ -65,7 +65,7 @@ A captain can still re-enable the upstream updater by overriding the environment
 No credentials or Agy authentication files are managed here.
 
 Pi exposes `pi update` and Herdr exposes `herdr update` as explicit self-update commands as well.
-Those commands are outside declarative activation and can create drift, while the next rebuild again requests Homebrew's currently resolved upgrades.
+Those commands are outside declarative activation and can create drift, while the next `./rebuild.sh --upgrade` invocation again requests Homebrew's currently resolved upgrades.
 The Nix-packaged no-mistakes and AXI tools are likewise updated by changing their pinned release or npm lock inputs, not by invoking a mutable updater.
 
 ## Operational-home activation
