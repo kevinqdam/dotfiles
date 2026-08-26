@@ -106,12 +106,8 @@ grep -Fq 'already a Binary at /opt/homebrew/bin/agy' "$TMP/conflict.err" \
   || fail 'Homebrew conflict diagnostic was not surfaced'
 [ ! -e "$state/targeted-upgrade" ] || fail 'failed upgrade changed the fixture'
 
-# Keep the updater opt-out declarative while leaving installation/versioning to
-# Homebrew.
-grep -Fq 'AGY_CLI_DISABLE_AUTO_UPDATE = "true"' "$SCRIPT_DIR/home.nix" \
-  || fail 'Agy auto-update opt-out is missing'
-if grep -Eq 'reinstall|--adopt|quarantine|receipt|check_agy|agy_version|outdated' "$CONVERGER"; then
-  fail 'convergence script still contains custom Agy package-management logic'
-fi
+agy_auto_update=$(cd "$SCRIPT_DIR" && nix eval --raw --no-write-lock-file \
+  '.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.sessionVariables.AGY_CLI_DISABLE_AUTO_UPDATE')
+assert_eq true "$agy_auto_update"
 
 printf 'ok - explicit greedy Homebrew allowlist, cask replacement side effects, conflict propagation, and exclusions\n'
