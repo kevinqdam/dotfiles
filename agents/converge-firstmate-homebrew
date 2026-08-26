@@ -34,14 +34,29 @@ run_brew() {
   fi
 }
 
+# This explicit allowlist is the narrow exception to Homebrew's global
+# upgrade=false boundary. It includes the Firstmate formulas and every
+# declared desktop cask except Anaconda.
+targeted_upgrades=(
+  pi-coding-agent
+  herdr
+  antigravity-cli
+  chatgpt
+  codex
+  google-drive
+  google-chrome
+  google-gemini
+  iterm2
+  logitune
+  raycast
+  superwhisper
+  tailscale-app
+  visual-studio-code
+)
+
 # Homebrew owns installation and versioning for these targeted packages.
 # Preserve its diagnostics and exit status so an exceptional pre-existing
 # conflict remains an operator-visible one-time repair instead of becoming
-# package logic here.
-run_brew upgrade \
-  --greedy \
-  --no-ask \
-  pi-coding-agent \
-  herdr \
-  antigravity-cli \
-  raycast
+# package logic here. Cask upgrades may download a new payload and replace the
+# installed application bundle.
+run_brew upgrade --greedy --no-ask "${targeted_upgrades[@]}"
