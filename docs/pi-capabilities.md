@@ -44,7 +44,7 @@ instead of silently accepting a new compatibility combination.
 3. Web search works without a checked-in key through its documented zero-config
    Exa path, and may also reuse existing Pi Codex authentication. Optional
    provider keys and routing belong in the local
-   `~/.pi/agent/web-search.json`, never in this repository or Nix.
+   `~/.pi/web-search.json`, never in this repository or Nix.
 4. Server-side compaction needs no separate key when the selected OpenAI or
    Codex model already works in Pi. The package's local config remains
    optional at `~/.pi/agent/openai-server-compaction.json`; set

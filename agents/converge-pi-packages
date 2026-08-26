@@ -75,9 +75,8 @@ list_packages() {
 }
 
 # Pi's list output is the public package-manager view of configured sources and
-# their install paths. Match only the exact source or its documented filtered
-# display form. Prefer the expected user-owned path when a project also lists
-# the same source, then return the first matching path as a repair candidate.
+# their install paths. Match only an unfiltered exact source, because object-form
+# filters can disable a reviewed package entry point.
 installed_path_for_source() {
   list_output=$1
   source_spec=$2
@@ -85,7 +84,9 @@ installed_path_for_source() {
   # shellcheck disable=SC2016
   printf '%s\n' "$list_output" |
     "$awk_bin" -v spec="$source_spec" -v expected="$expected_path" '
-      $0 == "  " spec || $0 == "  " spec " (filtered)" { package_seen = 1; next }
+      $0 == "User packages:" { user_packages = 1; next }
+      $0 == "Project packages:" { user_packages = 0; next }
+      user_packages && $0 == "  " spec { package_seen = 1; next }
       package_seen && $0 ~ /^    / {
         path = substr($0, 5)
         if (path == expected) { print path; found = 1; exit }
@@ -95,6 +96,37 @@ installed_path_for_source() {
       }
       package_seen { package_seen = 0 }
       END { if (!found && fallback != "") print fallback }
+    '
+}
+
+package_identity_prefix() {
+  case "$1" in
+    npm:@llblab/pi-telegram@*) printf '%s\n' 'npm:@llblab/pi-telegram@' ;;
+    npm:pi-web-access@*) printf '%s\n' 'npm:pi-web-access@' ;;
+    npm:@ryan_nookpi/pi-extension-codex-fast-mode@*)
+      printf '%s\n' 'npm:@ryan_nookpi/pi-extension-codex-fast-mode@'
+      ;;
+    git:github.com/algal/pi-openai-server-compaction@*)
+      printf '%s\n' 'git:github.com/algal/pi-openai-server-compaction@'
+      ;;
+    *)
+      printf 'pi-packages: unknown reviewed package source: %s\n' "$1" >&2
+      return 1
+      ;;
+  esac
+}
+
+user_package_identity_is_filtered() {
+  list_output=$1
+  source_spec=$2
+  identity_prefix=$(package_identity_prefix "$source_spec")
+  # shellcheck disable=SC2016
+  printf '%s\n' "$list_output" |
+    "$awk_bin" -v prefix="$identity_prefix" '
+      $0 == "User packages:" { user_packages = 1; next }
+      $0 == "Project packages:" { user_packages = 0; next }
+      user_packages && index($0, "  " prefix) == 1 && $0 ~ / \(filtered\)$/ { found = 1; exit }
+      END { exit !found }
     '
 }
 
@@ -202,6 +234,12 @@ for source_spec in "${package_specs[@]}"; do
   if package_is_converged "$list_output" "$source_spec"; then
     printf 'pi-packages: %s is already converged\n' "$source_spec"
     continue
+  fi
+
+  if user_package_identity_is_filtered "$list_output" "$source_spec"; then
+    printf 'pi-packages: clearing filters for reviewed source %s\n' "$source_spec"
+    PI_CODING_AGENT_DIR="$agent_dir" "$pi" remove "$source_spec"
+    list_output=$(list_packages)
   fi
 
   printf 'pi-packages: installing reviewed source %s\n' "$source_spec"
