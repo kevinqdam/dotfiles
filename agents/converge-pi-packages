@@ -204,14 +204,18 @@ manifest_matches() {
     "$package_path/package.json" >/dev/null 2>&1
 }
 
-git_head_matches() {
+git_checkout_matches() {
   package_path=$1
   expected_commit=$2
   [ -d "$package_path" ] || return 1
   if ! installed_commit=$("$git_bin" -C "$package_path" rev-parse HEAD 2>/dev/null); then
     return 1
   fi
-  [ "$installed_commit" = "$expected_commit" ]
+  [ "$installed_commit" = "$expected_commit" ] || return 1
+  if ! checkout_status=$("$git_bin" -C "$package_path" status --porcelain=v1 --untracked-files=no 2>/dev/null); then
+    return 1
+  fi
+  [ -z "$checkout_status" ]
 }
 
 package_is_converged() {
@@ -219,8 +223,18 @@ package_is_converged() {
   source_spec=$2
   expected_path=$(expected_install_path "$source_spec")
   expected_extension=$(expected_extension_path "$source_spec")
+  required_resources=(extensions "$expected_extension")
+  case "$source_spec" in
+    npm:@llblab/pi-telegram@*)
+      required_resources+=(
+        skills "$expected_path/skills/generated-control-surface/SKILL.md"
+        skills "$expected_path/skills/generative-apps/SKILL.md"
+        skills "$expected_path/skills/telegram-bridge/SKILL.md"
+      )
+      ;;
+  esac
   effective_state=$("$node_bin" "$effective_state_checker" \
-    "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "$expected_extension") || return 1
+    "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "${required_resources[@]}") || return 1
   package_identity_configured=$(printf '%s\n' "$effective_state" |
     "$jq_bin" -r '.identityConfigured') || return 1
   package_path=$(installed_path_for_source "$list_output" "$source_spec" "$expected_path")
@@ -232,11 +246,11 @@ package_is_converged() {
   manifest_matches "$package_path" "$expected_name" "$expected_version" || return 1
 
   printf '%s\n' "$effective_state" |
-    "$jq_bin" -e '.sourceMatches and .extensionEnabled' >/dev/null 2>&1 || return 1
+    "$jq_bin" -e '.requiredResourcesEnabled' >/dev/null 2>&1 || return 1
 
   case "$source_spec" in
     git:github.com/algal/pi-openai-server-compaction@*)
-      git_head_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055'
+      git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055'
       ;;
     npm:*)
       return 0

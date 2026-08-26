@@ -1,11 +1,13 @@
 import { readFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-const [sdkPath, agentDir, sourceSpec, extensionPath] = process.argv.slice(2);
+const [sdkPath, agentDir, sourceSpec, ...resourceArguments] = process.argv.slice(2);
 
-if (!sdkPath || !agentDir || !sourceSpec || !extensionPath) {
-	process.stderr.write("usage: pi-effective-package-state <sdk-path> <agent-directory> <source> <extension-path>\n");
+if (!sdkPath || !agentDir || !sourceSpec || resourceArguments.length === 0 || resourceArguments.length % 2 !== 0) {
+	process.stderr.write(
+		"usage: pi-effective-package-state <sdk-path> <agent-directory> <source> <resource-type> <resource-path> [...]\n",
+	);
 	process.exit(2);
 }
 
@@ -27,18 +29,27 @@ const identityConfigured = packageManager
 			entry.scope === "user" && packageManager.getPackageIdentity(entry.source, "user") === reviewedIdentity,
 	);
 const resources = await packageManager.resolve(async () => "skip");
-const expectedPath = resolve(extensionPath);
-const extension = resources.extensions.find(
-	(entry) =>
-		resolve(entry.path) === expectedPath &&
-		entry.metadata.origin === "package" &&
-		entry.metadata.scope === "user",
+const requiredResources = [];
+for (let index = 0; index < resourceArguments.length; index += 2) {
+	const resourceType = resourceArguments[index];
+	const resourcePath = resourceArguments[index + 1];
+	if (!Object.hasOwn(resources, resourceType)) throw new Error(`unknown Pi resource type: ${resourceType}`);
+	requiredResources.push({ resourceType, resourcePath: resolve(resourcePath) });
+}
+const requiredResourcesEnabled = requiredResources.every(({ resourceType, resourcePath }) =>
+	resources[resourceType].some(
+		(entry) =>
+			resolve(entry.path) === resourcePath &&
+			entry.enabled === true &&
+			entry.metadata.source === sourceSpec &&
+			entry.metadata.origin === "package" &&
+			entry.metadata.scope === "user",
+	),
 );
 
 process.stdout.write(
 	JSON.stringify({
 		identityConfigured,
-		sourceMatches: extension?.metadata.source === sourceSpec,
-		extensionEnabled: extension?.enabled === true,
+		requiredResourcesEnabled,
 	}),
 );

@@ -39,6 +39,10 @@ if [ "${1:-}" = '-C' ] && [ "${3:-}" = 'rev-parse' ] && [ "${4:-}" = 'HEAD' ]; t
   cat "$2/.head"
   exit 0
 fi
+if [ "${1:-}" = '-C' ] && [ "${3:-}" = 'status' ] && [ "${4:-}" = '--porcelain=v1' ]; then
+  [ ! -e "$2/.dirty" ] || printf '%s\n' ' M src/index.ts'
+  exit 0
+fi
 exit 97
 EOF
 chmod +x "$runtime_bin/git"
@@ -86,6 +90,17 @@ write_manifest() {
   printf '{"name":"%s","version":"%s","pi":{"extensions":["%s"]}}\n' \
     "$package_name" "$package_version" "$extension_entry" > "$package_path/package.json"
   printf '%s\n' 'export default function extension() {}' > "$package_path/$extension_file"
+}
+
+write_telegram_package() {
+  package_path=$1
+  write_manifest "$package_path" '@llblab/pi-telegram' '0.39.2'
+  jq '.pi.skills = ["./skills"]' "$package_path/package.json" > "$STATE/telegram-package.tmp"
+  /bin/mv "$STATE/telegram-package.tmp" "$package_path/package.json"
+  for skill in generated-control-surface generative-apps telegram-bridge; do
+    /bin/mkdir -p "$package_path/skills/$skill"
+    printf '%s\n' "# $skill" > "$package_path/skills/$skill/SKILL.md"
+  done
 }
 
 replace_configured_source() {
@@ -153,7 +168,7 @@ case "${1:-}" in
     case "$source_spec" in
       npm:@llblab/pi-telegram@0.39.2)
         replace_configured_source "$source_spec"
-        write_manifest "$(package_path "$source_spec")" '@llblab/pi-telegram' '0.39.2'
+        write_telegram_package "$(package_path "$source_spec")"
         ;;
       npm:pi-web-access@0.25.0)
         replace_configured_source "$source_spec"
@@ -168,6 +183,7 @@ case "${1:-}" in
         package_path=$(package_path "$source_spec")
         write_manifest "$package_path" 'pi-openai-server-compaction' '0.1.0' './src/index.ts'
         printf '%s\n' 'c6d593087709e9481223dc6c6c2269b371b5e055' > "$package_path/.head"
+        /bin/rm -f "$package_path/.dirty"
         ;;
       *)
         exit 97
@@ -286,6 +302,30 @@ for filtered_source in \
     any(.packages[]?; type == "object" and .source == $source and .extensions == ["index.ts"])
   ' "$agent_dir/settings.json" >/dev/null || fail "complete filter was not preserved: $filtered_source"
 done
+
+jq '
+  .packages = [.packages[] |
+    if type == "object" and .source == "npm:@llblab/pi-telegram@0.39.2"
+    then . + {skills: []}
+    else .
+    end]
+' "$agent_dir/settings.json" > "$state/settings.tmp"
+/bin/mv "$state/settings.tmp" "$agent_dir/settings.json"
+: > "$calls"
+run_converger
+assert_eq 'remove npm:@llblab/pi-telegram@0.39.2
+install npm:@llblab/pi-telegram@0.39.2' "$(cat "$calls")"
+assert_source_present 'npm:@llblab/pi-telegram@0.39.2'
+
+compaction_path="$agent_dir/git/github.com/algal/pi-openai-server-compaction"
+printf '%s\n' 'modified extension' > "$compaction_path/src/index.ts"
+: > "$compaction_path/.dirty"
+: > "$calls"
+run_converger
+assert_eq 'remove git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055
+install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055' "$(cat "$calls")"
+assert_eq 'export default function extension() {}' "$(cat "$compaction_path/src/index.ts")"
+[ ! -e "$compaction_path/.dirty" ] || fail 'dirty compaction checkout was not repaired'
 
 # Pi uses the first same-identity entry. A disabling filter followed by an
 # exact unfiltered duplicate is normalized to one active reviewed pin.
