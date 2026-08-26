@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-  printf 'usage: %s <pi-executable> <agent-directory> [effective-state-checker]\n' "$0" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 5 ]; then
+  printf 'usage: %s <pi-executable> <agent-directory> [effective-state-checker] [integrity-checker] [integrity-contract]\n' "$0" >&2
   exit 2
 fi
 
 pi=$1
 agent_dir=$2
 effective_state_checker=${3:-${0%/*}/pi-effective-package-state.mjs}
+integrity_checker=${4:-${0%/*}/pi-package-integrity.mjs}
+integrity_contract=${5:-${0%/*}/pi-package-integrity.json}
 while [ "$agent_dir" != "/" ] && [ "${agent_dir%/}" != "$agent_dir" ]; do
   agent_dir=${agent_dir%/}
 done
@@ -32,6 +34,7 @@ awk_bin=/usr/bin/awk
 jq_bin=jq
 git_bin=git
 node_bin=node
+npm_bin=npm
 
 # These are the reviewed package sources. Keep the exact npm versions and git
 # commit fixed here so activation never follows a mutable release or branch.
@@ -62,6 +65,10 @@ if ! command -v "$node_bin" >/dev/null 2>&1; then
   printf 'pi-packages: node is unavailable in the activation PATH\n' >&2
   exit 1
 fi
+if ! command -v "$npm_bin" >/dev/null 2>&1; then
+  printf 'pi-packages: npm is unavailable in the activation PATH\n' >&2
+  exit 1
+fi
 
 if [ -n "${PI_PACKAGE_MANAGER_SDK:-}" ]; then
   pi_package_manager_sdk=$PI_PACKAGE_MANAGER_SDK
@@ -79,6 +86,22 @@ if [ ! -f "$pi_package_manager_sdk" ]; then
 fi
 if [ ! -f "$effective_state_checker" ]; then
   printf 'pi-packages: effective package-state checker is unavailable: %s\n' "$effective_state_checker" >&2
+  exit 1
+fi
+if [ ! -f "$integrity_checker" ]; then
+  printf 'pi-packages: package-integrity checker is unavailable: %s\n' "$integrity_checker" >&2
+  exit 1
+fi
+if [ ! -f "$integrity_contract" ]; then
+  printf 'pi-packages: package-integrity contract is unavailable: %s\n' "$integrity_contract" >&2
+  exit 1
+fi
+if ! "$jq_bin" -e '
+  .schemaVersion == 1
+  and (.npmPackages | type == "object")
+  and (.gitPackages | type == "object")
+' "$integrity_contract" >/dev/null 2>&1; then
+  printf 'pi-packages: package-integrity contract is invalid: %s\n' "$integrity_contract" >&2
   exit 1
 fi
 
@@ -218,6 +241,49 @@ git_checkout_matches() {
   [ -z "$checkout_status" ]
 }
 
+npm_tree_matches() {
+  package_path=$1
+  source_spec=$2
+  if ! expected_digest=$("$jq_bin" -er --arg source "$source_spec" \
+    '.npmPackages[$source].treeSha256' "$integrity_contract" 2>/dev/null); then
+    return 1
+  fi
+  "$node_bin" "$integrity_checker" verify-tree \
+    "$package_path" "$expected_digest" node_modules >/dev/null 2>&1
+}
+
+compaction_dependencies_match() {
+  package_path=$1
+  source_spec=$2
+  "$node_bin" "$integrity_checker" verify-dependency-graph \
+    "$package_path" "$integrity_contract" "$source_spec" >/dev/null 2>&1
+}
+
+install_compaction_dependencies() {
+  package_path=$1
+  source_spec=$2
+  if ! dependency_count=$("$jq_bin" -er --arg source "$source_spec" \
+    '.gitPackages[$source].runtimeDependencies | length' "$integrity_contract" 2>/dev/null); then
+    return 1
+  fi
+  [ "$dependency_count" = 1 ] || return 1
+  if ! dependency_spec=$("$jq_bin" -er --arg source "$source_spec" \
+    '.gitPackages[$source].runtimeDependencies[0] | .name + "@" + .version' \
+    "$integrity_contract" 2>/dev/null); then
+    return 1
+  fi
+  "$npm_bin" install \
+    --prefix "$package_path" \
+    --no-save \
+    --package-lock=false \
+    --ignore-scripts \
+    --omit=dev \
+    --legacy-peer-deps \
+    --no-audit \
+    --no-fund \
+    "$dependency_spec"
+}
+
 package_is_converged() {
   list_output=$1
   source_spec=$2
@@ -250,10 +316,11 @@ package_is_converged() {
 
   case "$source_spec" in
     git:github.com/algal/pi-openai-server-compaction@*)
-      git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055'
+      git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055' || return 1
+      compaction_dependencies_match "$package_path" "$source_spec"
       ;;
     npm:*)
-      return 0
+      npm_tree_matches "$package_path" "$source_spec"
       ;;
     *)
       return 1
@@ -275,6 +342,14 @@ for source_spec in "${package_specs[@]}"; do
   fi
   printf 'pi-packages: installing reviewed source %s\n' "$source_spec"
   PI_CODING_AGENT_DIR="$agent_dir" "$pi" install "$source_spec"
+  case "$source_spec" in
+    git:github.com/algal/pi-openai-server-compaction@*)
+      if ! install_compaction_dependencies "$(expected_install_path "$source_spec")" "$source_spec"; then
+        printf 'pi-packages: unable to install the reviewed compaction dependency graph\n' >&2
+        exit 1
+      fi
+      ;;
+  esac
   list_output=$(list_packages)
   if ! package_is_converged "$list_output" "$source_spec"; then
     printf 'pi-packages: source did not converge to its reviewed package path and pin: %s\n' "$source_spec" >&2

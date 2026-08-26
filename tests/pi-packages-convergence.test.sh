@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CONVERGER="$SCRIPT_DIR/agents/converge-pi-packages"
 EFFECTIVE_STATE_CHECKER="$SCRIPT_DIR/agents/pi-effective-package-state.mjs"
+INTEGRITY_CHECKER="$SCRIPT_DIR/agents/pi-package-integrity.mjs"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/pi-packages-convergence-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 
@@ -13,8 +14,42 @@ runtime_bin="$TMP/restricted-bin"
 agent_dir="$TMP/agent"
 state="$TMP/fake-pi-state"
 calls="$TMP/calls"
+dependency_calls="$TMP/dependency-calls"
+integrity_contract="$TMP/pi-package-integrity.json"
 pi="$bin_dir/pi"
 mkdir -p "$bin_dir" "$runtime_bin" "$agent_dir" "$state"
+
+cat > "$integrity_contract" <<'EOF'
+{
+  "schemaVersion": 1,
+  "npmPackages": {
+    "npm:@llblab/pi-telegram@0.39.2": {
+      "npmIntegrity": "sha512-fixture-telegram",
+      "treeSha256": "25ecddc7c6d202dabe1da3ce12d4d886e8fab38550e71e604e5ca48d4cdd532b"
+    },
+    "npm:pi-web-access@0.25.0": {
+      "npmIntegrity": "sha512-fixture-web",
+      "treeSha256": "9ff1369cc5bc610933b49498b50818beae6e0bfe8b429cd5611bd55b06b21995"
+    },
+    "npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6": {
+      "npmIntegrity": "sha512-fixture-fast",
+      "treeSha256": "381302bb618d2e46a3a273c59346f2be25a9f75a70377f32698cc7e6adac9931"
+    }
+  },
+  "gitPackages": {
+    "git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055": {
+      "runtimeDependencies": [
+        {
+          "name": "ws",
+          "version": "8.18.3",
+          "npmIntegrity": "sha512-fixture-ws",
+          "treeSha256": "8af94d59e0fc880f2f30ce9b9364b6edb3714eb9c358f7a546acdcd9cec8e0e0"
+        }
+      ]
+    }
+  }
+}
+EOF
 
 # Mirror the activation PATH while intentionally masking bare awk. The helper
 # must use the stable macOS awk path and only the declared runtime tools.
@@ -46,6 +81,36 @@ fi
 exit 97
 EOF
 chmod +x "$runtime_bin/git"
+
+cat > "$runtime_bin/npm" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+: "${DEPENDENCY_CALLS:?}"
+prefix=
+dependency=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --prefix)
+      prefix=${2:?}
+      shift 2
+      ;;
+    ws@*)
+      dependency=$1
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+[ "$dependency" = 'ws@8.18.3' ] || exit 94
+[ -n "$prefix" ] || exit 93
+/bin/mkdir -p "$prefix/node_modules/ws"
+printf '%s\n' '{"name":"ws","version":"8.18.3"}' > "$prefix/node_modules/ws/package.json"
+printf '%s\n' 'module.exports = {};' > "$prefix/node_modules/ws/index.js"
+printf 'install %s\n' "$dependency" >> "$DEPENDENCY_CALLS"
+EOF
+chmod +x "$runtime_bin/npm"
 
 cat > "$pi" <<'EOF'
 #!/bin/bash
@@ -194,6 +259,9 @@ case "${1:-}" in
     source_spec=${2:?}
     printf 'remove %s\n' "$source_spec" >> "$CALLS"
     remove_configured_source "$source_spec"
+    if installed_path=$(package_path "$source_spec"); then
+      /bin/rm -rf "$installed_path"
+    fi
     ;;
   *)
     exit 98
@@ -221,10 +289,11 @@ assert_source_present() {
 }
 
 run_converger() {
-  PATH="$runtime_bin" CALLS="$calls" STATE="$state" \
+  PATH="$runtime_bin" CALLS="$calls" DEPENDENCY_CALLS="$dependency_calls" STATE="$state" \
     PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
     PI_VERSION="${PI_VERSION:-0.84.3}" \
-    /bin/bash "$CONVERGER" "$pi" "$agent_dir" "$EFFECTIVE_STATE_CHECKER"
+    /bin/bash "$CONVERGER" "$pi" "$agent_dir" "$EFFECTIVE_STATE_CHECKER" \
+      "$INTEGRITY_CHECKER" "$integrity_contract"
 }
 
 [ -x /usr/bin/awk ] || fail 'macOS system awk is unavailable for the activation contract'
@@ -241,6 +310,7 @@ printf '%s\n' 'captain auth state' > "$agent_dir/auth.json"
 printf '%s\n' 'captain fast-mode state' > "$agent_dir/state/codex-fast-mode.json"
 printf '%s\n' 'captain compaction config' > "$agent_dir/openai-server-compaction.json"
 : > "$calls"
+: > "$dependency_calls"
 run_converger
 expected_calls=$(cat <<'EOF'
 install npm:@llblab/pi-telegram@0.39.2
@@ -250,6 +320,7 @@ install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6
 EOF
 )
 assert_eq "$expected_calls" "$(cat "$calls")"
+assert_eq 'install ws@8.18.3' "$(cat "$dependency_calls")"
 assert_source_present 'npm:unrelated@9.9.9'
 assert_source_present 'npm:@llblab/pi-telegram@0.39.2'
 assert_source_present 'npm:pi-web-access@0.25.0'
@@ -284,6 +355,16 @@ assert_eq 'c6d593087709e9481223dc6c6c2269b371b5e055' \
 # A repeat activation is a no-op.
 run_converger
 assert_eq "$expected_calls" "$(cat "$calls")"
+assert_eq 'install ws@8.18.3' "$(cat "$dependency_calls")"
+
+web_package_path="$agent_dir/npm/node_modules/pi-web-access"
+printf '%s\n' 'modified web extension' > "$web_package_path/index.ts"
+: > "$calls"
+run_converger
+assert_eq 'remove npm:pi-web-access@0.25.0
+install npm:pi-web-access@0.25.0' "$(cat "$calls")"
+assert_eq 'export default function extension() {}' "$(cat "$web_package_path/index.ts")"
+assert_eq 'install ws@8.18.3' "$(cat "$dependency_calls")"
 
 # Complete object-form filters preserve every reviewed capability entry point.
 for filtered_source in \
@@ -326,6 +407,19 @@ assert_eq 'remove git:github.com/algal/pi-openai-server-compaction@c6d593087709e
 install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055' "$(cat "$calls")"
 assert_eq 'export default function extension() {}' "$(cat "$compaction_path/src/index.ts")"
 [ ! -e "$compaction_path/.dirty" ] || fail 'dirty compaction checkout was not repaired'
+
+printf '%s\n' 'modified websocket runtime' > "$compaction_path/node_modules/ws/index.js"
+/bin/mkdir -p "$compaction_path/node_modules/unreviewed-runtime"
+printf '%s\n' '{"name":"unreviewed-runtime","version":"1.0.0"}' > \
+  "$compaction_path/node_modules/unreviewed-runtime/package.json"
+: > "$calls"
+run_converger
+assert_eq 'remove git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055
+install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055' "$(cat "$calls")"
+assert_eq 'module.exports = {};' "$(cat "$compaction_path/node_modules/ws/index.js")"
+assert_eq '8.18.3' "$(jq -r .version "$compaction_path/node_modules/ws/package.json")"
+[ ! -e "$compaction_path/node_modules/unreviewed-runtime" ] \
+  || fail 'unreviewed compaction runtime dependency was not removed'
 
 # Pi uses the first same-identity entry. A disabling filter followed by an
 # exact unfiltered duplicate is normalized to one active reviewed pin.
@@ -400,8 +494,10 @@ bad_calls="$TMP/bad-calls"
 bad_agent="$TMP/bad-agent"
 mkdir -p "$bad_state" "$bad_agent"
 if PATH="$runtime_bin" CALLS="$bad_calls" STATE="$bad_state" PI_VERSION='0.84.4' \
+  DEPENDENCY_CALLS="$dependency_calls" \
   PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
   /bin/bash "$CONVERGER" "$pi" "$bad_agent" "$EFFECTIVE_STATE_CHECKER" \
+    "$INTEGRITY_CHECKER" "$integrity_contract" \
     >"$TMP/incompatible.out" 2>"$TMP/incompatible.err"; then
   fail 'incompatible Pi version was accepted'
 fi
@@ -410,4 +506,4 @@ grep -Fq 'refusing reviewed package pins' "$TMP/incompatible.err" \
   || fail 'incompatible-version refusal was not reported'
 [ ! -e "$bad_agent/npm" ] || fail 'incompatible Pi version created package storage'
 
-printf 'ok - fresh install, idempotent repeat, filtered-entry repair, stale pin repair, unrelated-package preservation, restricted PATH, and incompatible-version refusal\n'
+printf 'ok - fresh install, idempotent repeat, authenticated package repair, exact compaction dependencies, filtered-entry repair, stale pin repair, unrelated-package preservation, restricted PATH, and incompatible-version refusal\n'

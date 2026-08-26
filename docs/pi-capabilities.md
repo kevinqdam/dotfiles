@@ -7,10 +7,10 @@ runtime files writable by the captain.
 
 | Capability | Pin and reviewed source | Pi entry point |
 | --- | --- | --- |
-| Telegram bridge | `npm:@llblab/pi-telegram@0.39.2` from `https://github.com/llblab/pi-telegram` | Existing `/telegram-*` commands |
+| Telegram bridge | `npm:@llblab/pi-telegram@0.39.2`, npm integrity `sha512-SzleYw69R62QsGLQTLSw/do5XmbRp6uHy612FnVFjFAH5sZZ3zlIFpmHCTVr2kO1eAjwUWW5LCnmS5fuLzdLlg==`, from `https://github.com/llblab/pi-telegram` | Existing `/telegram-*` commands |
 | Web search and browsing | `npm:pi-web-access@0.25.0`, npm integrity `sha512-DYOEIMEPwpC6pHElexBy3XuaYPnfMxH0ZBaGrILFsLNQzhhHJ3kJLrCQU4fnKXYXV6OEwxsLt2pBP76koK4hHg==`, repository tag `v0.25.0` at `08e347f4fe6bea807882c2363527118cce6eb539` | `web_search`, `fetch_content`, and related tools |
 | Codex fast-mode toggle | `npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6`, npm integrity `sha512-DzJCqiXMnkAT77OjiGZm4y1nYPieTQzsjgR05O6+o43L4WrLrvxjUf360qBrNbNT2hGX6AbHvwC7fgXr0WrpmQ==`, release source `pi-extension` commit `80b0695503cd7234c9ce8d0fbe39d43907bcc8c9` | `/codex-fast on`, `/codex-fast off`, `/codex-fast status` |
-| OpenAI server-side compaction | `git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055` | Automatic compaction for supported OpenAI and Codex models |
+| OpenAI server-side compaction | `git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055`, with exact runtime dependency `ws@8.18.3` at npm integrity `sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==` | Automatic compaction for supported OpenAI and Codex models |
 
 The npm package manifests have no package lifecycle install scripts. Web
 access runtime dependencies are installed by Pi's package manager, with Pi's
@@ -19,6 +19,11 @@ extension manifests, runtime dependencies, network calls, credential sources,
 and install behavior before these pins were accepted. Web access performs
 network or browser-cookie work only when a tool or command uses it. The fast
 mode package changes OpenAI Codex request payloads only for its supported models.
+The converger authenticates every managed npm package tree against its reviewed
+tarball and reinstalls changed package contents. It also replaces the compaction
+repository's floating `ws` resolution with the exact audited version above,
+rejects any other runtime dependency graph, and disables dependency lifecycle
+scripts during that repair.
 The compaction package uses existing Pi authentication, sends supported
 conversation context to the OpenAI Responses compaction endpoint, and stores
 opaque provider artifacts in the local Pi session. None of these credentials or
