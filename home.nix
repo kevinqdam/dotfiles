@@ -128,7 +128,8 @@ in {
     export PATH
     ${./agents/converge-pi-packages} \
       "/opt/homebrew/bin/pi" \
-      "${config.home.homeDirectory}/.pi/agent"
+      "${config.home.homeDirectory}/.pi/agent" \
+      "${./agents/pi-effective-package-state.mjs}"
   '';
 
   # Global Pi integration. It is inert until /firstmate is invoked.

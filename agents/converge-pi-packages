@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -ne 2 ]; then
-  printf 'usage: %s <pi-executable> <agent-directory>\n' "$0" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+  printf 'usage: %s <pi-executable> <agent-directory> [effective-state-checker]\n' "$0" >&2
   exit 2
 fi
 
 pi=$1
 agent_dir=$2
+effective_state_checker=${3:-${0%/*}/pi-effective-package-state.mjs}
 while [ "$agent_dir" != "/" ] && [ "${agent_dir%/}" != "$agent_dir" ]; do
   agent_dir=${agent_dir%/}
 done
@@ -30,6 +31,7 @@ reviewed_pi_version='0.84.3'
 awk_bin=/usr/bin/awk
 jq_bin=jq
 git_bin=git
+node_bin=node
 
 # These are the reviewed package sources. Keep the exact npm versions and git
 # commit fixed here so activation never follows a mutable release or branch.
@@ -56,6 +58,29 @@ if ! command -v "$git_bin" >/dev/null 2>&1; then
   printf 'pi-packages: git is unavailable in the activation PATH\n' >&2
   exit 1
 fi
+if ! command -v "$node_bin" >/dev/null 2>&1; then
+  printf 'pi-packages: node is unavailable in the activation PATH\n' >&2
+  exit 1
+fi
+
+if [ -n "${PI_PACKAGE_MANAGER_SDK:-}" ]; then
+  pi_package_manager_sdk=$PI_PACKAGE_MANAGER_SDK
+else
+  if ! pi_real=$(/usr/bin/readlink -f "$pi"); then
+    printf 'pi-packages: unable to resolve the Pi executable: %s\n' "$pi" >&2
+    exit 1
+  fi
+  pi_prefix=${pi_real%/bin/pi}
+  pi_package_manager_sdk="$pi_prefix/libexec/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
+fi
+if [ ! -f "$pi_package_manager_sdk" ]; then
+  printf 'pi-packages: installed Pi package-manager SDK is unavailable: %s\n' "$pi_package_manager_sdk" >&2
+  exit 1
+fi
+if [ ! -f "$effective_state_checker" ]; then
+  printf 'pi-packages: effective package-state checker is unavailable: %s\n' "$effective_state_checker" >&2
+  exit 1
+fi
 
 # The compaction source was proven against this Pi release in an isolated agent
 # directory. Refuse all reviewed package changes when that compatibility anchor
@@ -75,8 +100,7 @@ list_packages() {
 }
 
 # Pi's list output is the public package-manager view of configured sources and
-# their install paths. Match only an unfiltered exact source, because object-form
-# filters can disable a reviewed package entry point.
+# their install paths.
 installed_path_for_source() {
   list_output=$1
   source_spec=$2
@@ -86,7 +110,7 @@ installed_path_for_source() {
     "$awk_bin" -v spec="$source_spec" -v expected="$expected_path" '
       $0 == "User packages:" { user_packages = 1; next }
       $0 == "Project packages:" { user_packages = 0; next }
-      user_packages && $0 == "  " spec { package_seen = 1; next }
+      user_packages && ($0 == "  " spec || $0 == "  " spec " (filtered)") { package_seen = 1; next }
       package_seen && $0 ~ /^    / {
         path = substr($0, 5)
         if (path == expected) { print path; found = 1; exit }
@@ -96,37 +120,6 @@ installed_path_for_source() {
       }
       package_seen { package_seen = 0 }
       END { if (!found && fallback != "") print fallback }
-    '
-}
-
-package_identity_prefix() {
-  case "$1" in
-    npm:@llblab/pi-telegram@*) printf '%s\n' 'npm:@llblab/pi-telegram@' ;;
-    npm:pi-web-access@*) printf '%s\n' 'npm:pi-web-access@' ;;
-    npm:@ryan_nookpi/pi-extension-codex-fast-mode@*)
-      printf '%s\n' 'npm:@ryan_nookpi/pi-extension-codex-fast-mode@'
-      ;;
-    git:github.com/algal/pi-openai-server-compaction@*)
-      printf '%s\n' 'git:github.com/algal/pi-openai-server-compaction@'
-      ;;
-    *)
-      printf 'pi-packages: unknown reviewed package source: %s\n' "$1" >&2
-      return 1
-      ;;
-  esac
-}
-
-user_package_identity_is_filtered() {
-  list_output=$1
-  source_spec=$2
-  identity_prefix=$(package_identity_prefix "$source_spec")
-  # shellcheck disable=SC2016
-  printf '%s\n' "$list_output" |
-    "$awk_bin" -v prefix="$identity_prefix" '
-      $0 == "User packages:" { user_packages = 1; next }
-      $0 == "Project packages:" { user_packages = 0; next }
-      user_packages && index($0, "  " prefix) == 1 && $0 ~ / \(filtered\)$/ { found = 1; exit }
-      END { exit !found }
     '
 }
 
@@ -208,6 +201,10 @@ package_is_converged() {
   list_output=$1
   source_spec=$2
   expected_path=$(expected_install_path "$source_spec")
+  effective_state=$("$node_bin" "$effective_state_checker" \
+    "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "$expected_path/index.ts") || return 1
+  package_identity_configured=$(printf '%s\n' "$effective_state" |
+    "$jq_bin" -r '.identityConfigured') || return 1
   package_path=$(installed_path_for_source "$list_output" "$source_spec" "$expected_path")
   [ -n "$package_path" ] || return 1
   [ "$package_path" = "$expected_path" ] || return 1
@@ -215,6 +212,9 @@ package_is_converged() {
   expected_name=$(package_name_for_source "$source_spec")
   expected_version=$(package_version_for_source "$source_spec")
   manifest_matches "$package_path" "$expected_name" "$expected_version" || return 1
+
+  printf '%s\n' "$effective_state" |
+    "$jq_bin" -e '.sourceMatches and .extensionEnabled' >/dev/null 2>&1 || return 1
 
   case "$source_spec" in
     git:github.com/algal/pi-openai-server-compaction@*)
@@ -231,17 +231,16 @@ package_is_converged() {
 
 list_output=$(list_packages)
 for source_spec in "${package_specs[@]}"; do
+  package_identity_configured=false
   if package_is_converged "$list_output" "$source_spec"; then
     printf 'pi-packages: %s is already converged\n' "$source_spec"
     continue
   fi
 
-  if user_package_identity_is_filtered "$list_output" "$source_spec"; then
-    printf 'pi-packages: clearing filters for reviewed source %s\n' "$source_spec"
+  if [ "$package_identity_configured" = true ]; then
+    printf 'pi-packages: resetting effective configuration for reviewed source %s\n' "$source_spec"
     PI_CODING_AGENT_DIR="$agent_dir" "$pi" remove "$source_spec"
-    list_output=$(list_packages)
   fi
-
   printf 'pi-packages: installing reviewed source %s\n' "$source_spec"
   PI_CODING_AGENT_DIR="$agent_dir" "$pi" install "$source_spec"
   list_output=$(list_packages)

@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CONVERGER="$SCRIPT_DIR/agents/converge-pi-packages"
+EFFECTIVE_STATE_CHECKER="$SCRIPT_DIR/agents/pi-effective-package-state.mjs"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/pi-packages-convergence-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 
@@ -17,9 +18,19 @@ mkdir -p "$bin_dir" "$runtime_bin" "$agent_dir" "$state"
 
 # Mirror the activation PATH while intentionally masking bare awk. The helper
 # must use the stable macOS awk path and only the declared runtime tools.
-for runtime_tool in cat jq mkdir; do
+for runtime_tool in cat jq mkdir node; do
   ln -s "$(command -v "$runtime_tool")" "$runtime_bin/$runtime_tool"
 done
+
+installed_pi=$(command -v pi)
+installed_pi_real=$(/usr/bin/readlink -f "$installed_pi")
+installed_pi_prefix=${installed_pi_real%/bin/pi}
+pi_package_manager_sdk="$installed_pi_prefix/libexec/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
+[ -f "$pi_package_manager_sdk" ] || {
+  printf 'pi-packages-convergence.test.sh: Pi package-manager SDK is unavailable: %s\n' \
+    "$pi_package_manager_sdk" >&2
+  exit 1
+}
 
 cat > "$runtime_bin/git" <<'EOF'
 #!/bin/bash
@@ -67,75 +78,48 @@ write_manifest() {
   package_name=$2
   package_version=$3
   /bin/mkdir -p "$package_path"
-  printf '{"name":"%s","version":"%s"}\n' "$package_name" "$package_version" > "$package_path/package.json"
+  printf '{"name":"%s","version":"%s","pi":{"extensions":["./index.ts"]}}\n' \
+    "$package_name" "$package_version" > "$package_path/package.json"
+  printf '%s\n' 'export default function extension() {}' > "$package_path/index.ts"
 }
 
 replace_configured_source() {
   new_source=$1
-  tmp_sources="$STATE/sources.tmp"
-  : > "$tmp_sources"
-  if [ -f "$STATE/sources" ]; then
-    case "$new_source" in
-      npm:@llblab/pi-telegram@*) replace_prefix='npm:@llblab/pi-telegram@' ;;
-      npm:pi-web-access@*) replace_prefix='npm:pi-web-access@' ;;
-      npm:@ryan_nookpi/pi-extension-codex-fast-mode@*) replace_prefix='npm:@ryan_nookpi/pi-extension-codex-fast-mode@' ;;
-      git:github.com/algal/pi-openai-server-compaction@*) replace_prefix='git:github.com/algal/pi-openai-server-compaction@' ;;
-      *) exit 96 ;;
-    esac
-    while IFS= read -r old_source; do
-      case "$old_source" in
-        "$replace_prefix"*)
-          ;;
-        *)
-          printf '%s\n' "$old_source" >> "$tmp_sources"
-          ;;
-      esac
-    done < "$STATE/sources"
-  fi
-  printf '%s\n' "$new_source" >> "$tmp_sources"
-  /bin/mv "$tmp_sources" "$STATE/sources"
-}
-
-source_is_filtered() {
-  source_spec=$1
-  [ -f "$STATE/filtered-sources" ] || return 1
-  while IFS= read -r filtered_source; do
-    [ "$filtered_source" = "$source_spec" ] && return 0
-  done < "$STATE/filtered-sources"
-  return 1
+  case "$new_source" in
+    npm:@llblab/pi-telegram@*) identity='npm:@llblab/pi-telegram' ;;
+    npm:pi-web-access@*) identity='npm:pi-web-access' ;;
+    npm:@ryan_nookpi/pi-extension-codex-fast-mode@*) identity='npm:@ryan_nookpi/pi-extension-codex-fast-mode' ;;
+    git:github.com/algal/pi-openai-server-compaction@*) identity='git:github.com/algal/pi-openai-server-compaction' ;;
+    *) exit 96 ;;
+  esac
+  jq --arg source "$new_source" --arg identity "$identity" '
+    def source: if type == "string" then . else .source end;
+    def same_identity: (source == $identity) or (source | startswith($identity + "@"));
+    (.packages // []) as $packages
+    | ([range(0; $packages | length) | select($packages[.] | same_identity)] | first) as $index
+    | if $index == null then .packages = ($packages + [$source])
+      elif .packages[$index] | type == "string" then .packages[$index] = $source
+      else .packages[$index].source = $source
+      end
+  ' "$PI_CODING_AGENT_DIR/settings.json" > "$STATE/settings.tmp"
+  /bin/mv "$STATE/settings.tmp" "$PI_CODING_AGENT_DIR/settings.json"
 }
 
 remove_configured_source() {
   source_spec=$1
   case "$source_spec" in
-    npm:@llblab/pi-telegram@*) remove_prefix='npm:@llblab/pi-telegram@' ;;
-    npm:pi-web-access@*) remove_prefix='npm:pi-web-access@' ;;
-    npm:@ryan_nookpi/pi-extension-codex-fast-mode@*) remove_prefix='npm:@ryan_nookpi/pi-extension-codex-fast-mode@' ;;
-    git:github.com/algal/pi-openai-server-compaction@*) remove_prefix='git:github.com/algal/pi-openai-server-compaction@' ;;
+    npm:@llblab/pi-telegram@*) identity='npm:@llblab/pi-telegram' ;;
+    npm:pi-web-access@*) identity='npm:pi-web-access' ;;
+    npm:@ryan_nookpi/pi-extension-codex-fast-mode@*) identity='npm:@ryan_nookpi/pi-extension-codex-fast-mode' ;;
+    git:github.com/algal/pi-openai-server-compaction@*) identity='git:github.com/algal/pi-openai-server-compaction' ;;
     *) exit 95 ;;
   esac
-  tmp_sources="$STATE/sources.tmp"
-  tmp_filtered="$STATE/filtered-sources.tmp"
-  : > "$tmp_sources"
-  : > "$tmp_filtered"
-  if [ -f "$STATE/sources" ]; then
-    while IFS= read -r old_source; do
-      case "$old_source" in
-        "$remove_prefix"*) ;;
-        *) printf '%s\n' "$old_source" >> "$tmp_sources" ;;
-      esac
-    done < "$STATE/sources"
-  fi
-  if [ -f "$STATE/filtered-sources" ]; then
-    while IFS= read -r filtered_source; do
-      case "$filtered_source" in
-        "$remove_prefix"*) ;;
-        *) printf '%s\n' "$filtered_source" >> "$tmp_filtered" ;;
-      esac
-    done < "$STATE/filtered-sources"
-  fi
-  /bin/mv "$tmp_sources" "$STATE/sources"
-  /bin/mv "$tmp_filtered" "$STATE/filtered-sources"
+  jq --arg identity "$identity" '
+    def source: if type == "string" then . else .source end;
+    def same_identity: (source == $identity) or (source | startswith($identity + "@"));
+    .packages = [(.packages // [])[] | select(same_identity | not)]
+  ' "$PI_CODING_AGENT_DIR/settings.json" > "$STATE/settings.tmp"
+  /bin/mv "$STATE/settings.tmp" "$PI_CODING_AGENT_DIR/settings.json"
 }
 
 case "${1:-}" in
@@ -144,10 +128,10 @@ case "${1:-}" in
     ;;
   list)
     printf 'User packages:\n'
-    if [ -f "$STATE/sources" ]; then
-      while IFS= read -r source_spec; do
-        [ -n "$source_spec" ] || continue
-        if source_is_filtered "$source_spec"; then
+    if [ -f "$PI_CODING_AGENT_DIR/settings.json" ]; then
+      jq -c '.packages[]?' "$PI_CODING_AGENT_DIR/settings.json" | while IFS= read -r package; do
+        source_spec=$(printf '%s\n' "$package" | jq -r 'if type == "string" then . else .source end')
+        if [ "$(printf '%s\n' "$package" | jq -r type)" = object ]; then
           printf '  %s (filtered)\n' "$source_spec"
         else
           printf '  %s\n' "$source_spec"
@@ -155,7 +139,7 @@ case "${1:-}" in
         if path=$(package_path "$source_spec"); then
           printf '    %s\n' "$path"
         fi
-      done < "$STATE/sources"
+      done
     fi
     ;;
   install)
@@ -210,13 +194,16 @@ assert_eq() {
 
 assert_source_present() {
   source_spec=$1
-  grep -Fqx "$source_spec" "$state/sources" || fail "missing configured source: $source_spec"
+  jq -e --arg source "$source_spec" '
+    any(.packages[]?; (if type == "string" then . else .source end) == $source)
+  ' "$agent_dir/settings.json" >/dev/null || fail "missing configured source: $source_spec"
 }
 
 run_converger() {
   PATH="$runtime_bin" CALLS="$calls" STATE="$state" \
+    PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
     PI_VERSION="${PI_VERSION:-0.84.3}" \
-    /bin/bash "$CONVERGER" "$pi" "$agent_dir"
+    /bin/bash "$CONVERGER" "$pi" "$agent_dir" "$EFFECTIVE_STATE_CHECKER"
 }
 
 [ -x /usr/bin/awk ] || fail 'macOS system awk is unavailable for the activation contract'
@@ -224,7 +211,7 @@ run_converger() {
 
 # Preserve captain-owned runtime files and an unrelated package while a fresh
 # agent directory receives all four reviewed packages.
-printf '%s\n' 'npm:unrelated@9.9.9' > "$state/sources"
+printf '%s\n' '{"packages":["npm:unrelated@9.9.9"]}' > "$agent_dir/settings.json"
 mkdir -p "$agent_dir/state"
 printf '%s\n' 'existing extension' > "$agent_dir/existing-extension.ts"
 printf '%s\n' 'captain telegram config' > "$agent_dir/telegram.json"
@@ -275,45 +262,73 @@ assert_eq 'c6d593087709e9481223dc6c6c2269b371b5e055' \
 run_converger
 assert_eq "$expected_calls" "$(cat "$calls")"
 
-# Object-form filters on any reviewed package are cleared so every pinned
-# capability entry point remains active.
+# Complete object-form filters preserve every reviewed capability entry point.
 for filtered_source in \
   'npm:@llblab/pi-telegram@0.39.2' \
   'npm:pi-web-access@0.25.0' \
   'npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6' \
   'git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055'; do
-  printf '%s\n' "$filtered_source" > "$state/filtered-sources"
+  jq --arg source "$filtered_source" '
+    .packages = [.packages[] | if . == $source then {source: ., extensions: ["index.ts"]} else . end]
+  ' "$agent_dir/settings.json" > "$state/settings.tmp"
+  /bin/mv "$state/settings.tmp" "$agent_dir/settings.json"
   : > "$calls"
   run_converger
-  expected_filtered_calls=$(printf 'remove %s\ninstall %s' "$filtered_source" "$filtered_source")
-  assert_eq "$expected_filtered_calls" "$(cat "$calls")"
-  [ ! -s "$state/filtered-sources" ] || fail "filter remained active: $filtered_source"
+  assert_eq '' "$(cat "$calls")"
+  jq -e --arg source "$filtered_source" '
+    any(.packages[]?; type == "object" and .source == $source and .extensions == ["index.ts"])
+  ' "$agent_dir/settings.json" >/dev/null || fail "complete filter was not preserved: $filtered_source"
 done
+
+# Pi uses the first same-identity entry. A disabling filter followed by an
+# exact unfiltered duplicate is normalized to one active reviewed pin.
+jq '.packages = [{"source":"npm:pi-web-access@0.25.0","extensions":[]}, "npm:pi-web-access@0.25.0"] + .packages' \
+  "$agent_dir/settings.json" > "$state/settings.tmp"
+/bin/mv "$state/settings.tmp" "$agent_dir/settings.json"
+: > "$calls"
+run_converger
+assert_eq 'remove npm:pi-web-access@0.25.0
+install npm:pi-web-access@0.25.0' "$(cat "$calls")"
+assert_eq '1' "$(jq '[.packages[] | select(. == "npm:pi-web-access@0.25.0")] | length' "$agent_dir/settings.json")"
+
+# Floating filtered identities are repaired to the exact pin in one activation.
+jq '.packages = [{"source":"npm:pi-web-access","extensions":[]}] + [.packages[] | select(. != "npm:pi-web-access@0.25.0")]' \
+  "$agent_dir/settings.json" > "$state/settings.tmp"
+/bin/mv "$state/settings.tmp" "$agent_dir/settings.json"
+: > "$calls"
+run_converger
+assert_eq 'remove npm:pi-web-access@0.25.0
+install npm:pi-web-access@0.25.0' "$(cat "$calls")"
+assert_source_present 'npm:pi-web-access@0.25.0'
 
 # Stale configured versions and refs are repaired to the reviewed pins, and the
 # unrelated package remains configured.
-cat > "$state/sources" <<'EOF'
-npm:@llblab/pi-telegram@0.39.1
-npm:pi-web-access@0.24.2
-npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.5
-git:github.com/algal/pi-openai-server-compaction@old-ref
-npm:unrelated@9.9.9
+cat > "$agent_dir/settings.json" <<'EOF'
+{"packages":[
+  "npm:@llblab/pi-telegram@0.39.1",
+  {"source":"npm:pi-web-access@0.24.2","extensions":[]},
+  "npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.5",
+  "git:github.com/algal/pi-openai-server-compaction@old-ref",
+  "npm:unrelated@9.9.9"
+]}
 EOF
-printf '%s\n' 'npm:pi-web-access@0.24.2' > "$state/filtered-sources"
 : > "$calls"
-printf '%s\n' '{"name":"@llblab/pi-telegram","version":"0.39.1"}' > \
+printf '%s\n' '{"name":"@llblab/pi-telegram","version":"0.39.1","pi":{"extensions":["./index.ts"]}}' > \
   "$agent_dir/npm/node_modules/@llblab/pi-telegram/package.json"
-printf '%s\n' '{"name":"pi-web-access","version":"0.24.2"}' > \
+printf '%s\n' '{"name":"pi-web-access","version":"0.24.2","pi":{"extensions":["./index.ts"]}}' > \
   "$agent_dir/npm/node_modules/pi-web-access/package.json"
-printf '%s\n' '{"name":"@ryan_nookpi/pi-extension-codex-fast-mode","version":"0.2.5"}' > \
+printf '%s\n' '{"name":"@ryan_nookpi/pi-extension-codex-fast-mode","version":"0.2.5","pi":{"extensions":["./index.ts"]}}' > \
   "$agent_dir/npm/node_modules/@ryan_nookpi/pi-extension-codex-fast-mode/package.json"
 printf '%s\n' 'old-ref' > "$agent_dir/git/github.com/algal/pi-openai-server-compaction/.head"
 run_converger
 expected_stale_calls=$(cat <<'EOF'
+remove npm:@llblab/pi-telegram@0.39.2
 install npm:@llblab/pi-telegram@0.39.2
 remove npm:pi-web-access@0.25.0
 install npm:pi-web-access@0.25.0
+remove npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6
 install npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6
+remove git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055
 install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055
 EOF
 )
@@ -323,7 +338,8 @@ assert_source_present 'npm:@llblab/pi-telegram@0.39.2'
 assert_source_present 'npm:pi-web-access@0.25.0'
 assert_source_present 'npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6'
 assert_source_present 'git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055'
-[ ! -s "$state/filtered-sources" ] || fail 'stale web filter remained active'
+jq -e 'all(.packages[]; type == "string")' "$agent_dir/settings.json" >/dev/null \
+  || fail 'stale package filter remained active'
 [ -e "$agent_dir/existing-extension.ts" ] || fail 'existing Pi extension was removed during stale repair'
 [ -e "$agent_dir/telegram.json" ] || fail 'Telegram config was changed during stale repair'
 [ -e "$TMP/web-search.json" ] || fail 'web-search config was changed during stale repair'
@@ -337,7 +353,9 @@ bad_calls="$TMP/bad-calls"
 bad_agent="$TMP/bad-agent"
 mkdir -p "$bad_state" "$bad_agent"
 if PATH="$runtime_bin" CALLS="$bad_calls" STATE="$bad_state" PI_VERSION='0.84.4' \
-  /bin/bash "$CONVERGER" "$pi" "$bad_agent" >"$TMP/incompatible.out" 2>"$TMP/incompatible.err"; then
+  PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
+  /bin/bash "$CONVERGER" "$pi" "$bad_agent" "$EFFECTIVE_STATE_CHECKER" \
+    >"$TMP/incompatible.out" 2>"$TMP/incompatible.err"; then
   fail 'incompatible Pi version was accepted'
 fi
 [ ! -e "$bad_calls" ] || [ ! -s "$bad_calls" ] || fail 'incompatible Pi version triggered an install'
