@@ -22,6 +22,10 @@ in {
     AGY_CLI_DISABLE_AUTO_UPDATE = "true";
     FIRSTMATE_ROOT = "${config.home.homeDirectory}/dev/firstmate";
     FIRSTMATE_HOME = "${config.home.homeDirectory}/.local/share/firstmate";
+    # Pi uses VISUAL, then EDITOR, when externalEditor is unset. Keep Vim on
+    # Pi's documented Ctrl-G external-editor path without changing Pi settings.
+    VISUAL = "vim";
+    EDITOR = "vim";
     # FM_HOME is the one primary operational home. Secondmate launches pass
     # their own FM_HOME explicitly and therefore retain their isolated homes.
     FM_HOME = "${config.home.homeDirectory}/.local/share/firstmate";
@@ -117,12 +121,12 @@ in {
   '';
 
   # Homebrew installs Pi before Home Manager activation. Let Pi own its
-  # ordinary-writable package settings and storage; do not link connector
-  # configuration or runtime state into the declarative profile.
-  home.activation.piTelegramPackage = lib.hm.dag.entryAfter [ "firstmateConfig" ] ''
+  # ordinary-writable package settings and storage; do not link connector,
+  # provider, or runtime configuration into the declarative profile.
+  home.activation.piPackages = lib.hm.dag.entryAfter [ "firstmateConfig" ] ''
     PATH="/opt/homebrew/bin:${pkgs.nodejs_22}/bin:${pkgs.jq}/bin:$PATH"
     export PATH
-    ${./agents/converge-pi-telegram} \
+    ${./agents/converge-pi-packages} \
       "/opt/homebrew/bin/pi" \
       "${config.home.homeDirectory}/.pi/agent"
   '';

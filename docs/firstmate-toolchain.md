@@ -24,13 +24,13 @@ A cask upgrade can download a new payload and replace its installed application 
 Fresh machines should use a plain rebuild first so declarative Homebrew installation creates the packages before an opt-in upgrade.
 Identical flake locks can therefore resolve different versions for these mutable Homebrew packages.
 
-## Pi Telegram mobile adapter
+## Pi package capabilities
 
-Home Manager converges the reviewed Pi package `npm:@llblab/pi-telegram@0.39.2` through Pi's package manager after Homebrew has installed Pi. The published package describes itself as a Telegram runtime adapter for Pi, requires Node `>=22.19.0`, and declares Pi peer floors of `>=0.80.6`; the Homebrew Pi toolchain satisfies that floor. The exact npm version is pinned so package updates do not move this connector implicitly.
+Home Manager converges the reviewed Pi package set through Pi's package manager after Homebrew has installed Pi. The pins, source audit, isolated compatibility evidence, and minimal local setup are documented in [Pi capabilities](./pi-capabilities.md). The convergence helper refuses the reviewed set unless the installed Pi is the audited 0.84.3 release.
 
-Activation manages only the package source and its ordinary-writable Pi package installation. It does not create or link Telegram configuration, bot tokens, account identifiers, pairing state, message history, or connector runtime files. Those remain local captain-owned runtime artifacts outside the repository and declarative configuration.
+Activation manages only package sources and their Pi-owned ordinary-writable installation paths. It does not create or link Telegram configuration, provider keys, OpenAI credentials, browser-cookie state, pairing state, message history, session files, or extension runtime files. Those remain local captain-owned runtime artifacts outside the repository and declarative configuration.
 
-After activation, the captain must start Pi locally and complete `/telegram-setup`, then `/telegram-connect`, then open the bot DM on the phone and send `/start`. Never commit the BotFather token or any generated Telegram runtime state.
+After activation, the captain must start Pi locally and complete the existing Telegram setup: `/telegram-setup`, `/telegram-connect`, then open the bot DM and send `/start`. Web provider keys, if needed, and the optional compaction or fast-mode settings are configured locally as described in [Pi capabilities](./pi-capabilities.md). Never commit any token or generated runtime state.
 
 ## Homebrew migration boundary
 
