@@ -37,7 +37,13 @@ set -euo pipefail
 [ "${HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK:-}" = 1 ]
 
 printf '%s\n' "$*" >> "$CALLS"
-expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 logitune raycast superwhisper tailscale-app visual-studio-code'
+for package in "${@:4}"; do
+  if [ "$package" = logitune ]; then
+    printf 'Error: Not upgrading 1 installer manual cask\n' >&2
+    exit 1
+  fi
+done
+expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code'
 if [ "$*" != "$expected" ]; then
   printf 'unexpected Homebrew command: %s\n' "$*" >&2
   exit 97
@@ -54,7 +60,7 @@ for package in "${@:4}"; do
     pi-coding-agent|herdr)
       : > "$STATE/formulas/$package"
       ;;
-    antigravity-cli|chatgpt|codex|google-drive|google-chrome|google-gemini|iterm2|logitune|raycast|superwhisper|tailscale-app|visual-studio-code)
+    antigravity-cli|chatgpt|codex|google-drive|google-chrome|google-gemini|iterm2|raycast|superwhisper|tailscale-app|visual-studio-code)
       # Model Homebrew downloading a cask payload and replacing its app bundle.
       : > "$STATE/downloaded/$package"
       : > "$STATE/replaced/$package"
@@ -78,11 +84,12 @@ rm -rf "$state"
 mkdir -p "$state"
 MODE=success CALLS="$calls" STATE="$state" \
   "$CONVERGER" "$brew" "$owner" >"$TMP/success.out" 2>"$TMP/success.err"
-assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 logitune raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
-for cask in antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 logitune raycast superwhisper tailscale-app visual-studio-code; do
+assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
+for cask in antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code; do
   [ -e "$state/downloaded/$cask" ] || fail "$cask download was not requested"
   [ -e "$state/replaced/$cask" ] || fail "$cask app replacement was not requested"
 done
+[ ! -e "$state/downloaded/logitune" ] || fail 'Logi Tune was unexpectedly downloaded'
 [ ! -e "$state/downloaded/anaconda" ] || fail 'Anaconda was unexpectedly downloaded'
 for formula in blueutil mono mysql mysql-client tcl-tk; do
   [ ! -e "$state/formulas/$formula" ] || fail "$formula was unexpectedly upgraded"
@@ -101,7 +108,7 @@ if MODE=conflict CALLS="$calls" STATE="$state" \
   "$CONVERGER" "$brew" "$owner" >"$TMP/conflict.out" 2>"$TMP/conflict.err"; then
   fail 'Homebrew conflict was treated as success'
 fi
-assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 logitune raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
+assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
 grep -Fq 'already a Binary at /opt/homebrew/bin/agy' "$TMP/conflict.err" \
   || fail 'Homebrew conflict diagnostic was not surfaced'
 [ ! -e "$state/targeted-upgrade" ] || fail 'failed upgrade changed the fixture'
@@ -110,4 +117,4 @@ agy_auto_update=$(cd "$SCRIPT_DIR" && nix eval --raw --no-write-lock-file \
   '.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.sessionVariables.AGY_CLI_DISABLE_AUTO_UPDATE')
 assert_eq true "$agy_auto_update"
 
-printf 'ok - explicit greedy Homebrew allowlist, cask replacement side effects, conflict propagation, and exclusions\n'
+printf 'ok - explicit greedy Homebrew allowlist, manual-cask exclusion, side effects, conflict propagation, and exclusions\n'

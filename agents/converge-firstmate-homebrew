@@ -36,7 +36,7 @@ run_brew() {
 
 # This explicit allowlist is the narrow exception to Homebrew's global
 # upgrade=false boundary. It includes the Firstmate formulas and every
-# declared desktop cask except Anaconda.
+# declared desktop cask except Anaconda and installer-manual Logi Tune.
 targeted_upgrades=(
   pi-coding-agent
   herdr
@@ -47,7 +47,6 @@ targeted_upgrades=(
   google-chrome
   google-gemini
   iterm2
-  logitune
   raycast
   superwhisper
   tailscale-app
