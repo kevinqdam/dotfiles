@@ -34,12 +34,14 @@ run_brew() {
   fi
 }
 
-# Homebrew owns installation and versioning for these tools. Preserve its
-# diagnostics and exit status so an exceptional pre-existing conflict remains
-# an operator-visible one-time repair instead of becoming package logic here.
+# Homebrew owns installation and versioning for these targeted packages.
+# Preserve its diagnostics and exit status so an exceptional pre-existing
+# conflict remains an operator-visible one-time repair instead of becoming
+# package logic here.
 run_brew upgrade \
   --greedy \
   --no-ask \
   pi-coding-agent \
   herdr \
-  antigravity-cli
+  antigravity-cli \
+  raycast

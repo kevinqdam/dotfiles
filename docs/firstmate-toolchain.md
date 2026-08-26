@@ -11,13 +11,13 @@ The active Herdr backend adds Herdr, jq, and Treehouse.
 Nixpkgs supplies Node 22, Git, GitHub CLI, jq, ShellCheck 0.11.0, and actionlint 1.7.12.
 Those package versions are resolved from the locked Nixpkgs input rather than from a mutable Homebrew or npm installation.
 
-Pi, Agy, and Herdr remain Homebrew-managed because the existing configuration already uses their supported macOS installation surfaces.
-Pi is the `pi-coding-agent` formula, Agy is the `antigravity-cli` cask, and Herdr is the `herdr` formula.
-The flake lock pins the nix-homebrew Homebrew implementation, but it does not pin the formula metadata or payloads for these three tools.
+Pi, Agy, Herdr, and Raycast remain Homebrew-managed because the existing configuration already uses their supported macOS installation surfaces.
+Pi is the `pi-coding-agent` formula, Agy is the `antigravity-cli` cask, Herdr is the `herdr` formula, and Raycast is the `raycast` cask.
+The flake lock pins the nix-homebrew Homebrew implementation, but it does not pin the formula metadata or payloads for these packages.
 They are an explicitly mutable containment boundary: tap mutation and Homebrew's implementation auto-update are disabled, and Homebrew Bundle installs missing declarations without globally upgrading the Brewfile.
-After Bundle completes, activation forces an API metadata refresh and upgrades only Pi, Herdr, and the greedy Agy cask to the versions currently resolved by Homebrew.
-Other Homebrew formulae and casks are not part of this Firstmate convergence step.
-Identical flake locks can therefore resolve different Pi, Agy, or Herdr versions.
+After Bundle completes, activation forces an API metadata refresh and upgrades only Pi, Herdr, and the greedy Agy and Raycast casks to the versions currently resolved by Homebrew.
+Other Homebrew formulae and casks are not part of this targeted activation convergence step.
+Identical flake locks can therefore resolve different Pi, Agy, Herdr, or Raycast versions.
 
 ## Pi Telegram mobile adapter
 

@@ -37,7 +37,7 @@ set -euo pipefail
 [ "${HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK:-}" = 1 ]
 
 printf '%s\n' "$*" >> "$CALLS"
-expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli'
+expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli raycast'
 if [ "$*" != "$expected" ]; then
   printf 'unexpected Homebrew command: %s\n' "$*" >&2
   exit 97
@@ -60,7 +60,7 @@ rm -rf "$state"
 mkdir -p "$state"
 MODE=success CALLS="$calls" STATE="$state" \
   "$CONVERGER" "$brew" "$owner" >"$TMP/success.out" 2>"$TMP/success.err"
-assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli' "$(cat "$calls")"
+assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli raycast' "$(cat "$calls")"
 [ -e "$state/targeted-upgrade" ] || fail 'targeted upgrade was not completed'
 [ ! -s "$TMP/success.err" ] || fail 'successful upgrade emitted unexpected diagnostics'
 
@@ -73,7 +73,7 @@ if MODE=conflict CALLS="$calls" STATE="$state" \
   "$CONVERGER" "$brew" "$owner" >"$TMP/conflict.out" 2>"$TMP/conflict.err"; then
   fail 'Homebrew conflict was treated as success'
 fi
-assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli' "$(cat "$calls")"
+assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli raycast' "$(cat "$calls")"
 grep -Fq 'already a Binary at /opt/homebrew/bin/agy' "$TMP/conflict.err" \
   || fail 'Homebrew conflict diagnostic was not surfaced'
 [ ! -e "$state/targeted-upgrade" ] || fail 'failed upgrade changed the fixture'
@@ -86,4 +86,4 @@ if grep -Eq 'reinstall|--adopt|quarantine|receipt|check_agy|agy_version|outdated
   fail 'convergence script still contains custom Agy package-management logic'
 fi
 
-printf 'ok - targeted Homebrew upgrade, conflict propagation, and no unrelated package changes\n'
+printf 'ok - targeted greedy Homebrew upgrade, conflict propagation, and no unrelated package changes\n'
