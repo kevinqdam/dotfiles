@@ -202,6 +202,14 @@ case "${1:-}" in
       npm:pi-web-access@0.25.0)
         replace_configured_source "$source_spec"
         write_manifest "$(package_path "$source_spec")" 'pi-web-access' '0.25.0'
+        if [ -e "$STATE/web-runtime-dependency" ]; then
+          web_path=$(package_path "$source_spec")
+          jq '.dependencies = {linkedom: "^0.18.0"}' "$web_path/package.json" > "$STATE/web-package.tmp"
+          /bin/mv "$STATE/web-package.tmp" "$web_path/package.json"
+          /bin/mkdir -p "$PI_CODING_AGENT_DIR/npm/node_modules/linkedom"
+          printf '%s\n' '{"name":"linkedom","version":"0.18.12"}' > \
+            "$PI_CODING_AGENT_DIR/npm/node_modules/linkedom/package.json"
+        fi
         ;;
       npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6)
         replace_configured_source "$source_spec"
@@ -293,6 +301,20 @@ fail() {
   printf 'pi-packages-convergence.test.sh: %s\n' "$*" >&2
   exit 1
 }
+
+normalizer_agent="$TMP/normalizer-agent"
+normalizer_settings="$TMP/normalizer-settings.json"
+mkdir -p "$normalizer_agent"
+printf '%s\n' '{"packages":["npm:pi-web-access@0.25.0","npm:pi-web-access@0.24.2"],"npmCommand":["captain-npm","--pinned"]}' > \
+  "$normalizer_settings"
+ln -s "$normalizer_settings" "$normalizer_agent/settings.json"
+node "$PACKAGE_NORMALIZER" "$pi_package_manager_sdk" "$normalizer_agent" \
+  'npm:pi-web-access@0.25.0' false
+[ -L "$normalizer_agent/settings.json" ] || fail 'package normalization replaced the settings symlink'
+jq -e '
+  .npmCommand == ["captain-npm", "--pinned"]
+  and .packages == ["npm:pi-web-access@0.25.0"]
+' "$normalizer_settings" >/dev/null || fail 'package normalization changed unrelated settings'
 
 assert_eq() {
   expected=$1
@@ -390,6 +412,29 @@ assert_eq "$expected_calls" "$(cat "$calls")"
 assert_eq '' "$(cat "$repair_calls")"
 
 web_package_path="$agent_dir/npm/node_modules/pi-web-access"
+: > "$state/web-runtime-dependency"
+jq '.dependencies = {linkedom: "^0.18.0"}' "$web_package_path/package.json" > "$state/web-package.tmp"
+/bin/mv "$state/web-package.tmp" "$web_package_path/package.json"
+mkdir -p "$agent_dir/npm/node_modules/linkedom"
+printf '%s\n' '{"name":"linkedom","version":"0.18.12"}' > \
+  "$agent_dir/npm/node_modules/linkedom/package.json"
+web_digest=$(node "$INTEGRITY_CHECKER" digest "$web_package_path" node_modules)
+jq --arg digest "$web_digest" \
+  '.npmPackages["npm:pi-web-access@0.25.0"].treeSha256 = $digest' \
+  "$integrity_contract" > "$state/integrity-contract.tmp"
+/bin/mv "$state/integrity-contract.tmp" "$integrity_contract"
+run_converger
+assert_eq "$expected_calls" "$(cat "$calls")"
+/bin/rm -rf "$agent_dir/npm/node_modules/linkedom"
+: > "$calls"
+: > "$repair_calls"
+run_converger
+assert_eq 'install npm:pi-web-access@0.25.0' "$(cat "$calls")"
+assert_eq 'remove npm:pi-web-access@0.25.0 via ["captain-npm","--pinned"]
+install npm:pi-web-access@0.25.0 via ["captain-npm","--pinned"]' "$(cat "$repair_calls")"
+[ -f "$agent_dir/npm/node_modules/linkedom/package.json" ] \
+  || fail 'missing declared runtime dependency was not repaired'
+
 printf '%s\n' 'modified web extension' > "$web_package_path/index.ts"
 : > "$calls"
 : > "$repair_calls"
@@ -570,4 +615,4 @@ grep -Fq 'refusing reviewed package pins' "$TMP/incompatible.err" \
   || fail 'incompatible-version refusal was not reported'
 [ ! -e "$bad_agent/npm" ] || fail 'incompatible Pi version created package storage'
 
-printf 'ok - fresh install, idempotent repeat, authenticated package repair, complete-filter preservation, npmCommand preservation, filtered-entry repair, stale pin repair, unrelated-package preservation, restricted PATH, and incompatible-version refusal\n'
+printf 'ok - fresh install, idempotent repeat, runtime dependency repair, authenticated package repair, complete-filter preservation, npmCommand preservation, filtered-entry repair, stale pin repair, unrelated-package preservation, restricted PATH, and incompatible-version refusal\n'

@@ -1,6 +1,7 @@
 { config, lib, pkgs, ... }:
 let
   firstmateToolchain = import ./nix/firstmate-toolchain.nix { inherit pkgs; };
+  piWithVim = import ./nix/pi-with-vim.nix { inherit pkgs; };
   firstmateConfigMaterializer = pkgs.stdenv.mkDerivation {
     pname = "firstmate-config-materializer";
     version = "1.0.0";
@@ -22,10 +23,6 @@ in {
     AGY_CLI_DISABLE_AUTO_UPDATE = "true";
     FIRSTMATE_ROOT = "${config.home.homeDirectory}/dev/firstmate";
     FIRSTMATE_HOME = "${config.home.homeDirectory}/.local/share/firstmate";
-    # Pi uses VISUAL, then EDITOR, when externalEditor is unset. Keep Vim on
-    # Pi's documented Ctrl-G external-editor path without changing Pi settings.
-    VISUAL = "vim";
-    EDITOR = "vim";
     # FM_HOME is the one primary operational home. Secondmate launches pass
     # their own FM_HOME explicitly and therefore retain their isolated homes.
     FM_HOME = "${config.home.homeDirectory}/.local/share/firstmate";
@@ -61,6 +58,7 @@ in {
     firstmateToolchain.axiTools
     firstmateToolchain.noMistakes
     firstmateToolchain.treehouse
+    piWithVim
   ];
 
   programs.git = {

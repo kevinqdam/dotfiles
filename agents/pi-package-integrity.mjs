@@ -6,7 +6,7 @@ import {
 	readdirSync,
 	readlinkSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 const [command, ...arguments_] = process.argv.slice(2);
 
@@ -60,6 +60,71 @@ function assertSha256(value, label) {
 	if (!/^[0-9a-f]{64}$/.test(value)) fail(`invalid ${label}: ${value}`);
 }
 
+function readManifest(path, label) {
+	let manifest;
+	try {
+		manifest = JSON.parse(readFileSync(path, "utf8"));
+	} catch {
+		fail(`unable to read ${label}: ${path}`);
+	}
+	if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+		fail(`invalid ${label}: ${path}`);
+	}
+	return manifest;
+}
+
+function dependencyPathParts(name) {
+	if (/^@[a-z0-9._~-]+\/[a-z0-9._~-]+$/i.test(name)) return name.split("/");
+	if (/^[a-z0-9._~-]+$/i.test(name)) return [name];
+	fail(`invalid dependency name: ${name}`);
+}
+
+function findDependencyManifest(packageRoot, dependency) {
+	const pathParts = dependencyPathParts(dependency);
+	let directory = resolve(packageRoot);
+	let nodeModulesDirectory = directory;
+	while (basename(nodeModulesDirectory) !== "node_modules") {
+		const parent = dirname(nodeModulesDirectory);
+		if (parent === nodeModulesDirectory) fail(`package is outside node_modules: ${packageRoot}`);
+		nodeModulesDirectory = parent;
+	}
+	const installRoot = dirname(nodeModulesDirectory);
+	while (true) {
+		const candidate = join(directory, "node_modules", ...pathParts, "package.json");
+		try {
+			readFileSync(candidate);
+			return candidate;
+		} catch (error) {
+			if (error?.code !== "ENOENT" && error?.code !== "ENOTDIR") {
+				fail(`unable to inspect dependency ${dependency}: ${candidate}`);
+			}
+		}
+		if (directory === installRoot) return undefined;
+		directory = dirname(directory);
+	}
+}
+
+function verifyDependencies(packageRoot) {
+	const manifestPath = join(resolve(packageRoot), "package.json");
+	const manifest = readManifest(manifestPath, "package manifest");
+	const dependencies = manifest.dependencies ?? {};
+	if (!dependencies || typeof dependencies !== "object" || Array.isArray(dependencies)) {
+		fail(`invalid dependencies field: ${manifestPath}`);
+	}
+	for (const dependency of Object.keys(dependencies)) {
+		const dependencyManifestPath = findDependencyManifest(packageRoot, dependency);
+		if (!dependencyManifestPath) fail(`missing runtime dependency ${dependency} for ${packageRoot}`);
+		const dependencyManifest = readManifest(dependencyManifestPath, `dependency manifest for ${dependency}`);
+		if (
+			dependencyManifest.name !== dependency ||
+			typeof dependencyManifest.version !== "string" ||
+			dependencyManifest.version.length === 0
+		) {
+			fail(`invalid runtime dependency ${dependency} for ${packageRoot}`);
+		}
+	}
+}
+
 if (command === "digest") {
 	const [root, ...excludedEntries] = arguments_;
 	if (!root) fail("usage: digest <tree-root> [excluded-root-entry ...]");
@@ -69,6 +134,10 @@ if (command === "digest") {
 	if (!root || !expectedDigest) fail("usage: verify-tree <tree-root> <sha256> [excluded-root-entry ...]");
 	assertSha256(expectedDigest, "tree digest");
 	if (treeDigest(root, new Set(excludedEntries)) !== expectedDigest) process.exit(1);
+} else if (command === "verify-dependencies") {
+	const [root] = arguments_;
+	if (!root || arguments_.length !== 1) fail("usage: verify-dependencies <package-root>");
+	verifyDependencies(root);
 } else {
-	fail("usage: <digest|verify-tree> ...");
+	fail("usage: <digest|verify-tree|verify-dependencies> ...");
 }

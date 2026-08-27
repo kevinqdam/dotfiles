@@ -39,10 +39,11 @@ instead of silently accepting a new compatibility combination.
 
 ## Post-activation setup
 
-1. Rebuild the system, then start a new shell or Pi process so the declarative
-   `VISUAL=vim` and `EDITOR=vim` environment is present. Pi's documented
-   `Ctrl-G` external-editor action uses those variables when `externalEditor` is
-   unset. No Pi `externalEditor` setting or custom modal editor is written.
+1. Rebuild the system, then start Pi through Home Manager's managed `pi`
+   launcher. The launcher supplies only Pi with `VISUAL=vim` and `EDITOR=vim`,
+   so Pi's documented `Ctrl-G` external-editor action uses Vim when
+   `externalEditor` is unset. Other processes retain the captain's existing
+   editor environment.
 2. Fast mode is off by default. Use `/codex-fast on` when the captain wants
    `text.verbosity=low` plus Codex `service_tier=priority`; use `/codex-fast off`
    to remove the priority tier. Its state remains in the ordinary-writable

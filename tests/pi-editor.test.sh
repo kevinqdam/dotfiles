@@ -11,19 +11,36 @@ fail() {
 }
 
 session_variables=$(nix eval --impure --json \
-  '.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.sessionVariables')
-jq -e '.VISUAL == "vim" and .EDITOR == "vim"' <<<"$session_variables" >/dev/null \
-  || fail 'Home Manager did not export Vim as VISUAL and EDITOR'
+  'path:.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.sessionVariables')
+jq -e 'has("VISUAL") | not' <<<"$session_variables" >/dev/null \
+  || fail 'Home Manager still exports a global VISUAL editor'
+jq -e 'has("EDITOR") | not' <<<"$session_variables" >/dev/null \
+  || fail 'Home Manager still exports a global EDITOR editor'
 
-VISUAL=vim EDITOR=emacs node --input-type=module <<'EOF'
-import assert from "node:assert/strict";
-import { SettingsManager } from "/opt/homebrew/Cellar/pi-coding-agent/0.84.3/libexec/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js";
-
-const environmentFallback = SettingsManager.inMemory({});
-assert.equal(environmentFallback.getExternalEditorCommand(), "vim");
-
-const explicitPiSetting = SettingsManager.inMemory({ externalEditor: "nano" });
-assert.equal(explicitPiSetting.getExternalEditorCommand(), "nano");
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/pi-editor-test.XXXXXX")
+trap 'rm -rf "$TMP"' EXIT
+fake_pi="$TMP/pi-target"
+cat > "$fake_pi" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${VISUAL-unset}" "${EDITOR-unset}" "$#"
+printf '<%s>\n' "$@"
 EOF
+chmod +x "$fake_pi"
 
-printf 'ok - Home Manager exports Vim and Pi resolves it through the documented external-editor precedence\n'
+wrapper=$(FAKE_PI="$fake_pi" nix build --impure --no-link --print-out-paths --expr '
+  let
+    flake = builtins.getFlake (toString ./.);
+    pkgs = flake.inputs.nixpkgs.legacyPackages.${builtins.currentSystem};
+  in import ./nix/pi-with-vim.nix {
+    inherit pkgs;
+    piExecutable = builtins.getEnv "FAKE_PI";
+  }
+')
+output=$(VISUAL=emacs EDITOR=nano "$wrapper/bin/pi" alpha 'two words')
+[ "$output" = 'vim
+vim
+2
+<alpha>
+<two words>' ] || fail 'managed Pi launcher did not scope Vim or preserve arguments'
+
+printf 'ok - Vim is scoped to the managed Pi launcher\n'

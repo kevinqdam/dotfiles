@@ -257,7 +257,9 @@ npm_tree_matches() {
     return 1
   fi
   "$node_bin" "$integrity_checker" verify-tree \
-    "$package_path" "$expected_digest" node_modules >/dev/null 2>&1
+    "$package_path" "$expected_digest" node_modules >/dev/null 2>&1 || return 1
+  "$node_bin" "$integrity_checker" verify-dependencies \
+    "$package_path" >/dev/null 2>&1
 }
 
 package_is_converged() {
