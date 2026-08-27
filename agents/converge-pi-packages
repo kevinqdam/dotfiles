@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 7 ]; then
-  printf 'usage: %s <pi-executable> <agent-directory> [effective-state-checker] [integrity-checker] [integrity-contract] [package-repairer] [package-repair-sdk]\n' "$0" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 8 ]; then
+  printf 'usage: %s <pi-executable> <agent-directory> [effective-state-checker] [integrity-checker] [integrity-contract] [package-repairer] [package-normalizer] [package-repair-sdk]\n' "$0" >&2
   exit 2
 fi
 
@@ -12,6 +12,7 @@ effective_state_checker=${3:-${0%/*}/pi-effective-package-state.mjs}
 integrity_checker=${4:-${0%/*}/pi-package-integrity.mjs}
 integrity_contract=${5:-${0%/*}/pi-package-integrity.json}
 package_repairer=${6:-${0%/*}/pi-repair-package.mjs}
+package_normalizer=${7:-${0%/*}/pi-normalize-package.mjs}
 while [ "$agent_dir" != "/" ] && [ "${agent_dir%/}" != "$agent_dir" ]; do
   agent_dir=${agent_dir%/}
 done
@@ -21,14 +22,14 @@ if [ -d "$agent_dir" ]; then
     exit 1
   fi
 else
-  agent_parent=${agent_dir%/*}
-  agent_name=${agent_dir##*/}
-  [ "$agent_parent" = "$agent_dir" ] && agent_parent=.
-  if ! agent_parent=$(cd "$agent_parent" && pwd -P); then
-    printf 'pi-packages: unable to resolve the Pi agent directory parent: %s\n' "$2" >&2
+  if ! /bin/mkdir -p "$agent_dir"; then
+    printf 'pi-packages: unable to create the Pi agent directory: %s\n' "$2" >&2
     exit 1
   fi
-  agent_dir="$agent_parent/$agent_name"
+  if ! agent_dir=$(cd "$agent_dir" && pwd -P); then
+    printf 'pi-packages: unable to resolve the Pi agent directory: %s\n' "$2" >&2
+    exit 1
+  fi
 fi
 reviewed_pi_version='0.84.3'
 awk_bin=/usr/bin/awk
@@ -75,7 +76,7 @@ else
   pi_prefix=${pi_real%/bin/pi}
   pi_package_manager_sdk="$pi_prefix/libexec/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
 fi
-package_repair_sdk=${7:-$pi_package_manager_sdk}
+package_repair_sdk=${8:-$pi_package_manager_sdk}
 if [ ! -f "$pi_package_manager_sdk" ]; then
   printf 'pi-packages: installed Pi package-manager SDK is unavailable: %s\n' "$pi_package_manager_sdk" >&2
   exit 1
@@ -94,6 +95,10 @@ if [ ! -f "$integrity_contract" ]; then
 fi
 if [ ! -f "$package_repairer" ]; then
   printf 'pi-packages: package repairer is unavailable: %s\n' "$package_repairer" >&2
+  exit 1
+fi
+if [ ! -f "$package_normalizer" ]; then
+  printf 'pi-packages: package normalizer is unavailable: %s\n' "$package_normalizer" >&2
   exit 1
 fi
 if [ ! -f "$package_repair_sdk" ]; then
@@ -274,12 +279,22 @@ package_is_converged() {
     "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "${required_resources[@]}") || return 1
   package_identity_configured=$(printf '%s\n' "$effective_state" |
     "$jq_bin" -r '.identityConfigured') || return 1
+  package_first_source_reviewed=$(printf '%s\n' "$effective_state" |
+    "$jq_bin" -r '.firstConfiguredSourceReviewed') || return 1
+  package_sources_reviewed=$(printf '%s\n' "$effective_state" |
+    "$jq_bin" -r '.allConfiguredSourcesReviewed') || return 1
   package_configuration_valid=$(printf '%s\n' "$effective_state" |
     "$jq_bin" -r '.requiredResourcesEnabled') || return 1
-  case "$package_identity_configured:$package_configuration_valid" in
-    true:true|true:false|false:true|false:false) ;;
-    *) return 1 ;;
-  esac
+  for package_state in \
+    "$package_identity_configured" \
+    "$package_first_source_reviewed" \
+    "$package_sources_reviewed" \
+    "$package_configuration_valid"; do
+    case "$package_state" in
+      true|false) ;;
+      *) return 1 ;;
+    esac
+  done
   if [ "$package_identity_configured" != true ]; then
     package_configuration_valid=false
     return 1
@@ -292,35 +307,58 @@ package_is_converged() {
   expected_version=$(package_version_for_source "$source_spec")
   manifest_matches "$package_path" "$expected_name" "$expected_version" || return 1
 
-  [ "$package_configuration_valid" = true ] || return 1
-
   case "$source_spec" in
     git:github.com/algal/pi-openai-server-compaction@*)
-      git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055'
+      if git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055'; then
+        package_contents_valid=true
+      fi
       ;;
     npm:*)
-      npm_tree_matches "$package_path" "$source_spec"
+      if npm_tree_matches "$package_path" "$source_spec"; then
+        package_contents_valid=true
+      fi
       ;;
     *)
       return 1
       ;;
   esac
+  [ "$package_sources_reviewed" = true ] &&
+    [ "$package_configuration_valid" = true ] &&
+    [ "$package_contents_valid" = true ]
 }
 
 list_output=$(list_packages)
 for source_spec in "${package_specs[@]}"; do
   package_identity_configured=false
+  package_first_source_reviewed=false
+  package_sources_reviewed=false
   package_configuration_valid=false
+  package_contents_valid=false
   if package_is_converged "$list_output" "$source_spec"; then
     printf 'pi-packages: %s is already converged\n' "$source_spec"
     continue
   fi
 
-  if [ "$package_configuration_valid" = true ]; then
+  if [ "$package_first_source_reviewed" = true ] && [ "$package_contents_valid" != true ]; then
     printf 'pi-packages: repairing reviewed source contents without changing configuration: %s\n' "$source_spec"
     if ! "$node_bin" "$package_repairer" \
       "$package_repair_sdk" "$agent_dir" "$source_spec"; then
       printf 'pi-packages: unable to repair reviewed source contents: %s\n' "$source_spec" >&2
+      exit 1
+    fi
+    list_output=$(list_packages)
+    package_contents_valid=false
+    if package_is_converged "$list_output" "$source_spec"; then
+      printf 'pi-packages: %s converged after source repair\n' "$source_spec"
+      continue
+    fi
+  fi
+
+  if [ "$package_first_source_reviewed" = true ]; then
+    printf 'pi-packages: normalizing reviewed source configuration: %s\n' "$source_spec"
+    if ! "$node_bin" "$package_normalizer" \
+      "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "$package_configuration_valid"; then
+      printf 'pi-packages: unable to normalize reviewed source configuration: %s\n' "$source_spec" >&2
       exit 1
     fi
   else

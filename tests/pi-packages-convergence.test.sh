@@ -7,6 +7,7 @@ CONVERGER="$SCRIPT_DIR/agents/converge-pi-packages"
 EFFECTIVE_STATE_CHECKER="$SCRIPT_DIR/agents/pi-effective-package-state.mjs"
 INTEGRITY_CHECKER="$SCRIPT_DIR/agents/pi-package-integrity.mjs"
 PACKAGE_REPAIRER="$SCRIPT_DIR/agents/pi-repair-package.mjs"
+PACKAGE_NORMALIZER="$SCRIPT_DIR/agents/pi-normalize-package.mjs"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/pi-packages-convergence-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 
@@ -190,6 +191,9 @@ case "${1:-}" in
   install)
     source_spec=${2:?}
     printf 'install %s\n' "$source_spec" >> "$CALLS"
+    if [ ! -f "$PI_CODING_AGENT_DIR/settings.json" ]; then
+      printf '%s\n' '{"packages":[]}' > "$PI_CODING_AGENT_DIR/settings.json"
+    fi
     case "$source_spec" in
       npm:@llblab/pi-telegram@0.39.2)
         replace_configured_source "$source_spec"
@@ -304,16 +308,34 @@ assert_source_present() {
 }
 
 run_converger() {
+  target_agent=${1:-$agent_dir}
   PATH="$runtime_bin" CALLS="$calls" REPAIR_CALLS="$repair_calls" STATE="$state" \
     PI_FIXTURE_EXECUTABLE="$pi" \
     PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
     PI_VERSION="${PI_VERSION:-0.84.3}" \
-    /bin/bash "$CONVERGER" "$pi" "$agent_dir" "$EFFECTIVE_STATE_CHECKER" \
-      "$INTEGRITY_CHECKER" "$integrity_contract" "$PACKAGE_REPAIRER" "$repair_sdk"
+    /bin/bash "$CONVERGER" "$pi" "$target_agent" "$EFFECTIVE_STATE_CHECKER" \
+      "$INTEGRITY_CHECKER" "$integrity_contract" "$PACKAGE_REPAIRER" \
+      "$PACKAGE_NORMALIZER" "$repair_sdk"
 }
 
 [ -x /usr/bin/awk ] || fail 'macOS system awk is unavailable for the activation contract'
 [ ! -e "$runtime_bin/awk" ] || fail 'restricted activation fixture unexpectedly exposes awk'
+
+expected_calls=$(cat <<'EOF'
+install npm:@llblab/pi-telegram@0.39.2
+install npm:pi-web-access@0.25.0
+install npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6
+install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055
+EOF
+)
+fresh_agent="$TMP/fresh-home/.pi/agent"
+: > "$calls"
+: > "$repair_calls"
+run_converger "$fresh_agent"
+assert_eq "$expected_calls" "$(cat "$calls")"
+[ -d "$fresh_agent" ] || fail 'fresh Pi agent directory was not created'
+jq -e '.packages | length == 4' "$fresh_agent/settings.json" >/dev/null \
+  || fail 'fresh Pi home did not receive all reviewed packages'
 
 # Preserve captain-owned runtime files and an unrelated package while a fresh
 # agent directory receives all four reviewed packages.
@@ -329,13 +351,6 @@ printf '%s\n' 'captain compaction config' > "$agent_dir/openai-server-compaction
 : > "$calls"
 : > "$repair_calls"
 run_converger
-expected_calls=$(cat <<'EOF'
-install npm:@llblab/pi-telegram@0.39.2
-install npm:pi-web-access@0.25.0
-install npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6
-install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055
-EOF
-)
 assert_eq "$expected_calls" "$(cat "$calls")"
 assert_eq '' "$(cat "$repair_calls")"
 assert_source_present 'npm:unrelated@9.9.9'
@@ -404,7 +419,7 @@ for filtered_source in \
   ' "$agent_dir/settings.json" >/dev/null || fail "complete filter was not preserved: $filtered_source"
 done
 
-printf '%s\n' 'modified filtered web extension' > "$web_package_path/index.ts"
+/bin/rm -f "$web_package_path/index.ts"
 : > "$calls"
 : > "$repair_calls"
 run_converger
@@ -419,6 +434,22 @@ jq -e '
 assert_eq 'remove npm:pi-web-access@0.25.0 via ["captain-npm","--pinned"]
 install npm:pi-web-access@0.25.0 via ["captain-npm","--pinned"]' "$(cat "$repair_calls")"
 
+jq '.packages += ["npm:pi-web-access", "npm:pi-web-access@0.24.2"]' \
+  "$agent_dir/settings.json" > "$state/settings.tmp"
+/bin/mv "$state/settings.tmp" "$agent_dir/settings.json"
+: > "$calls"
+: > "$repair_calls"
+run_converger
+assert_eq '' "$(cat "$calls")"
+assert_eq '' "$(cat "$repair_calls")"
+jq -e '
+  def source: if type == "string" then . else .source end;
+  [.packages[] | select((source == "npm:pi-web-access") or (source | startswith("npm:pi-web-access@")))] as $web
+  | ($web | length) == 1
+  and $web[0].source == "npm:pi-web-access@0.25.0"
+  and $web[0].extensions == ["index.ts"]
+' "$agent_dir/settings.json" >/dev/null || fail 'stale duplicates remained or complete filter was lost'
+
 jq '
   .packages = [.packages[] |
     if type == "object" and .source == "npm:@llblab/pi-telegram@0.39.2"
@@ -428,9 +459,10 @@ jq '
 ' "$agent_dir/settings.json" > "$state/settings.tmp"
 /bin/mv "$state/settings.tmp" "$agent_dir/settings.json"
 : > "$calls"
+: > "$repair_calls"
 run_converger
-assert_eq 'remove npm:@llblab/pi-telegram@0.39.2
-install npm:@llblab/pi-telegram@0.39.2' "$(cat "$calls")"
+assert_eq '' "$(cat "$calls")"
+assert_eq '' "$(cat "$repair_calls")"
 assert_source_present 'npm:@llblab/pi-telegram@0.39.2'
 
 compaction_path="$agent_dir/git/github.com/algal/pi-openai-server-compaction"
@@ -457,9 +489,10 @@ jq '.packages = [{"source":"npm:pi-web-access@0.25.0","extensions":[]}, "npm:pi-
   "$agent_dir/settings.json" > "$state/settings.tmp"
 /bin/mv "$state/settings.tmp" "$agent_dir/settings.json"
 : > "$calls"
+: > "$repair_calls"
 run_converger
-assert_eq 'remove npm:pi-web-access@0.25.0
-install npm:pi-web-access@0.25.0' "$(cat "$calls")"
+assert_eq '' "$(cat "$calls")"
+assert_eq '' "$(cat "$repair_calls")"
 assert_eq '1' "$(jq '[.packages[] | select(. == "npm:pi-web-access@0.25.0")] | length' "$agent_dir/settings.json")"
 
 # Floating filtered identities are repaired to the exact pin in one activation.
@@ -527,7 +560,8 @@ if PATH="$runtime_bin" CALLS="$bad_calls" STATE="$bad_state" PI_VERSION='0.84.4'
   REPAIR_CALLS="$repair_calls" PI_FIXTURE_EXECUTABLE="$pi" \
   PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
   /bin/bash "$CONVERGER" "$pi" "$bad_agent" "$EFFECTIVE_STATE_CHECKER" \
-    "$INTEGRITY_CHECKER" "$integrity_contract" "$PACKAGE_REPAIRER" "$repair_sdk" \
+    "$INTEGRITY_CHECKER" "$integrity_contract" "$PACKAGE_REPAIRER" \
+    "$PACKAGE_NORMALIZER" "$repair_sdk" \
     >"$TMP/incompatible.out" 2>"$TMP/incompatible.err"; then
   fail 'incompatible Pi version was accepted'
 fi

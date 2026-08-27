@@ -132,7 +132,8 @@ in {
       "${./agents/pi-effective-package-state.mjs}" \
       "${./agents/pi-package-integrity.mjs}" \
       "${./agents/pi-package-integrity.json}" \
-      "${./agents/pi-repair-package.mjs}"
+      "${./agents/pi-repair-package.mjs}" \
+      "${./agents/pi-normalize-package.mjs}"
   '';
 
   # Global Pi integration. It is inert until /firstmate is invoked.

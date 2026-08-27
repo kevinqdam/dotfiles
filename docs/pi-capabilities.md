@@ -22,7 +22,9 @@ mode package changes OpenAI Codex request payloads only for its supported models
 The converger authenticates every managed npm package tree against its reviewed
 tarball and reinstalls changed package contents without rewriting a validated
 package filter. Manifest-declared transitive dependencies resolve normally
-through Pi's configured `npmCommand`.
+through Pi's configured `npmCommand` and registry, which form the trusted
+acquisition boundary. The converger retains its post-install top-level tree
+integrity check and refuses content that differs from the reviewed package.
 The compaction package uses existing Pi authentication, sends supported
 conversation context to the OpenAI Responses compaction endpoint, and stores
 opaque provider artifacts in the local Pi session. None of these credentials or

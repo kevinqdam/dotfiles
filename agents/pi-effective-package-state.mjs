@@ -22,12 +22,16 @@ const { DefaultPackageManager, SettingsManager } = await import(pathToFileURL(sd
 const settingsManager = SettingsManager.inMemory(settings, { projectTrusted: false });
 const packageManager = new DefaultPackageManager({ cwd: agentDir, agentDir, settingsManager });
 const reviewedIdentity = packageManager.getPackageIdentity(sourceSpec, "user");
-const identityConfigured = packageManager
+const configuredEntries = packageManager
 	.listConfiguredPackages()
-	.some(
+	.filter(
 		(entry) =>
 			entry.scope === "user" && packageManager.getPackageIdentity(entry.source, "user") === reviewedIdentity,
 	);
+const identityConfigured = configuredEntries.length > 0;
+const firstConfiguredSourceReviewed = configuredEntries[0]?.source === sourceSpec;
+const allConfiguredSourcesReviewed =
+	identityConfigured && configuredEntries.every((entry) => entry.source === sourceSpec);
 const resources = await packageManager.resolve(async () => "skip");
 const requiredResources = [];
 for (let index = 0; index < resourceArguments.length; index += 2) {
@@ -50,6 +54,8 @@ const requiredResourcesEnabled = requiredResources.every(({ resourceType, resour
 process.stdout.write(
 	JSON.stringify({
 		identityConfigured,
+		firstConfiguredSourceReviewed,
+		allConfiguredSourcesReviewed,
 		requiredResourcesEnabled,
 	}),
 );
