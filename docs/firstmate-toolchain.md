@@ -11,13 +11,18 @@ The active Herdr backend adds Herdr, jq, and Treehouse.
 Nixpkgs supplies Node 22, Git, GitHub CLI, jq, ShellCheck 0.11.0, and actionlint 1.7.12.
 Those package versions are resolved from the locked Nixpkgs input rather than from a mutable Homebrew or npm installation.
 
-Pi, Agy, and Herdr remain Homebrew-managed because the existing configuration already uses their supported macOS installation surfaces.
-Pi is the `pi-coding-agent` formula, Agy is the `antigravity-cli` cask, and Herdr is the `herdr` formula.
-The flake lock pins the nix-homebrew Homebrew implementation, but it does not pin the formula metadata or payloads for these three tools.
+Pi, Agy, Herdr, and the declared desktop casks remain Homebrew-managed because the existing configuration already uses their supported macOS installation surfaces.
+Pi is the `pi-coding-agent` formula, Herdr is the `herdr` formula, and Agy is the `antigravity-cli` cask.
+The flake lock pins the nix-homebrew Homebrew implementation, but it does not pin Homebrew formula metadata, cask recipes, or payloads.
 They are an explicitly mutable containment boundary: tap mutation and Homebrew's implementation auto-update are disabled, and Homebrew Bundle installs missing declarations without globally upgrading the Brewfile.
-After Bundle completes, activation forces an API metadata refresh and upgrades only Pi, Herdr, and the greedy Agy cask to the versions currently resolved by Homebrew.
-Other Homebrew formulae and casks are not part of this Firstmate convergence step.
-Identical flake locks can therefore resolve different Pi, Agy, or Herdr versions.
+
+Plain `./rebuild.sh` applies declarative package presence and configuration only; it keeps `homebrew.onActivation.upgrade = false` and performs no targeted version upgrades.
+`./rebuild.sh --upgrade` first runs `brew upgrade --greedy --no-ask` for the explicit allowlist of `pi-coding-agent`, `herdr`, `antigravity-cli`, `chatgpt`, `codex`, `google-drive`, `google-chrome`, `google-gemini`, `iterm2`, `raycast`, `superwhisper`, `tailscale-app`, and `visual-studio-code`, then applies the normal Nix rebuild.
+The declared `anaconda` cask is deliberately excluded from that allowlist, as are `blueutil`, `mono`, `mysql`, `mysql-client`, `tcl-tk`, and all undeclared packages.
+The declared `logitune` cask (Logi Tune) is also excluded because Homebrew identifies it as installer-manual; its vendor installer or application self-update remains a manual operation. This keeps a Logi Tune update from preventing the Nix rebuild.
+A cask upgrade can download a new payload and replace its installed application bundle during the rebuild; affected applications may need to be restarted.
+Fresh machines should use a plain rebuild first so declarative Homebrew installation creates the packages before an opt-in upgrade.
+Identical flake locks can therefore resolve different versions for these mutable Homebrew packages.
 
 ## Pi Telegram mobile adapter
 
@@ -55,13 +60,13 @@ The official Antigravity CLI page documents `curl -fsSL https://antigravity.goog
 This configuration intentionally keeps the existing Homebrew `antigravity-cli` cask instead of replacing it with an imperative installer.
 
 The cask remains declaratively present, but its recipe and payload are not pinned by `flake.lock`, and the upstream CLI advertises automatic updates.
-Home Manager exports the supported `AGY_CLI_DISABLE_AUTO_UPDATE=true` opt-out, so Agy processes launched from the managed session leave upgrades to Homebrew activation.
-The cask is upgraded greedily against refreshed Homebrew metadata by the same targeted Homebrew upgrade as Pi and Herdr. Homebrew owns Agy installation and versioning; activation does not inspect receipts, execute Agy, or repair package conflicts. An exceptional pre-existing conflict remains visible in Homebrew's error output for one-time operator repair.
+Home Manager exports the supported `AGY_CLI_DISABLE_AUTO_UPDATE=true` opt-out, so Agy processes launched from the managed session leave upgrades to the explicit `./rebuild.sh --upgrade` path.
+The cask is upgraded greedily against refreshed Homebrew metadata by the allowlisted Homebrew command. Homebrew owns Agy installation and versioning; the rebuild path does not inspect receipts, execute Agy, or repair package conflicts. An exceptional pre-existing conflict remains visible in Homebrew's error output for one-time operator repair, and an upgrade can replace the Agy application bundle while it is closed or running.
 A captain can still re-enable the upstream updater by overriding the environment variable or launching Agy outside the managed session.
 No credentials or Agy authentication files are managed here.
 
 Pi exposes `pi update` and Herdr exposes `herdr update` as explicit self-update commands as well.
-Those commands are outside declarative activation and can create drift, while the next rebuild again requests Homebrew's currently resolved upgrades.
+Those commands are outside declarative activation and can create drift, while the next `./rebuild.sh --upgrade` invocation again requests Homebrew's currently resolved upgrades.
 The Nix-packaged no-mistakes and AXI tools are likewise updated by changing their pinned release or npm lock inputs, not by invoking a mutable updater.
 
 ## Operational-home activation

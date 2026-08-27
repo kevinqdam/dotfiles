@@ -82,9 +82,4 @@
       ${lib.escapeShellArg config.nix-homebrew.group}
   '';
 
-  system.activationScripts.postActivation.text = lib.mkAfter ''
-    ${./agents/converge-firstmate-homebrew} \
-      ${lib.escapeShellArg "${config.homebrew.prefix}/bin/brew"} \
-      ${lib.escapeShellArg config.homebrew.user}
-  '';
 }
