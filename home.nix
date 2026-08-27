@@ -131,7 +131,8 @@ in {
       "${config.home.homeDirectory}/.pi/agent" \
       "${./agents/pi-effective-package-state.mjs}" \
       "${./agents/pi-package-integrity.mjs}" \
-      "${./agents/pi-package-integrity.json}"
+      "${./agents/pi-package-integrity.json}" \
+      "${./agents/pi-repair-package.mjs}"
   '';
 
   # Global Pi integration. It is inert until /firstmate is invoked.

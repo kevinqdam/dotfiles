@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 5 ]; then
-  printf 'usage: %s <pi-executable> <agent-directory> [effective-state-checker] [integrity-checker] [integrity-contract]\n' "$0" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 7 ]; then
+  printf 'usage: %s <pi-executable> <agent-directory> [effective-state-checker] [integrity-checker] [integrity-contract] [package-repairer] [package-repair-sdk]\n' "$0" >&2
   exit 2
 fi
 
@@ -11,6 +11,7 @@ agent_dir=$2
 effective_state_checker=${3:-${0%/*}/pi-effective-package-state.mjs}
 integrity_checker=${4:-${0%/*}/pi-package-integrity.mjs}
 integrity_contract=${5:-${0%/*}/pi-package-integrity.json}
+package_repairer=${6:-${0%/*}/pi-repair-package.mjs}
 while [ "$agent_dir" != "/" ] && [ "${agent_dir%/}" != "$agent_dir" ]; do
   agent_dir=${agent_dir%/}
 done
@@ -34,7 +35,6 @@ awk_bin=/usr/bin/awk
 jq_bin=jq
 git_bin=git
 node_bin=node
-npm_bin=npm
 
 # These are the reviewed package sources. Keep the exact npm versions and git
 # commit fixed here so activation never follows a mutable release or branch.
@@ -65,11 +65,6 @@ if ! command -v "$node_bin" >/dev/null 2>&1; then
   printf 'pi-packages: node is unavailable in the activation PATH\n' >&2
   exit 1
 fi
-if ! command -v "$npm_bin" >/dev/null 2>&1; then
-  printf 'pi-packages: npm is unavailable in the activation PATH\n' >&2
-  exit 1
-fi
-
 if [ -n "${PI_PACKAGE_MANAGER_SDK:-}" ]; then
   pi_package_manager_sdk=$PI_PACKAGE_MANAGER_SDK
 else
@@ -80,6 +75,7 @@ else
   pi_prefix=${pi_real%/bin/pi}
   pi_package_manager_sdk="$pi_prefix/libexec/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
 fi
+package_repair_sdk=${7:-$pi_package_manager_sdk}
 if [ ! -f "$pi_package_manager_sdk" ]; then
   printf 'pi-packages: installed Pi package-manager SDK is unavailable: %s\n' "$pi_package_manager_sdk" >&2
   exit 1
@@ -96,10 +92,17 @@ if [ ! -f "$integrity_contract" ]; then
   printf 'pi-packages: package-integrity contract is unavailable: %s\n' "$integrity_contract" >&2
   exit 1
 fi
+if [ ! -f "$package_repairer" ]; then
+  printf 'pi-packages: package repairer is unavailable: %s\n' "$package_repairer" >&2
+  exit 1
+fi
+if [ ! -f "$package_repair_sdk" ]; then
+  printf 'pi-packages: package repair SDK is unavailable: %s\n' "$package_repair_sdk" >&2
+  exit 1
+fi
 if ! "$jq_bin" -e '
   .schemaVersion == 1
   and (.npmPackages | type == "object")
-  and (.gitPackages | type == "object")
 ' "$integrity_contract" >/dev/null 2>&1; then
   printf 'pi-packages: package-integrity contract is invalid: %s\n' "$integrity_contract" >&2
   exit 1
@@ -252,38 +255,6 @@ npm_tree_matches() {
     "$package_path" "$expected_digest" node_modules >/dev/null 2>&1
 }
 
-compaction_dependencies_match() {
-  package_path=$1
-  source_spec=$2
-  "$node_bin" "$integrity_checker" verify-dependency-graph \
-    "$package_path" "$integrity_contract" "$source_spec" >/dev/null 2>&1
-}
-
-install_compaction_dependencies() {
-  package_path=$1
-  source_spec=$2
-  if ! dependency_count=$("$jq_bin" -er --arg source "$source_spec" \
-    '.gitPackages[$source].runtimeDependencies | length' "$integrity_contract" 2>/dev/null); then
-    return 1
-  fi
-  [ "$dependency_count" = 1 ] || return 1
-  if ! dependency_spec=$("$jq_bin" -er --arg source "$source_spec" \
-    '.gitPackages[$source].runtimeDependencies[0] | .name + "@" + .version' \
-    "$integrity_contract" 2>/dev/null); then
-    return 1
-  fi
-  "$npm_bin" install \
-    --prefix "$package_path" \
-    --no-save \
-    --package-lock=false \
-    --ignore-scripts \
-    --omit=dev \
-    --legacy-peer-deps \
-    --no-audit \
-    --no-fund \
-    "$dependency_spec"
-}
-
 package_is_converged() {
   list_output=$1
   source_spec=$2
@@ -303,6 +274,16 @@ package_is_converged() {
     "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "${required_resources[@]}") || return 1
   package_identity_configured=$(printf '%s\n' "$effective_state" |
     "$jq_bin" -r '.identityConfigured') || return 1
+  package_configuration_valid=$(printf '%s\n' "$effective_state" |
+    "$jq_bin" -r '.requiredResourcesEnabled') || return 1
+  case "$package_identity_configured:$package_configuration_valid" in
+    true:true|true:false|false:true|false:false) ;;
+    *) return 1 ;;
+  esac
+  if [ "$package_identity_configured" != true ]; then
+    package_configuration_valid=false
+    return 1
+  fi
   package_path=$(installed_path_for_source "$list_output" "$source_spec" "$expected_path")
   [ -n "$package_path" ] || return 1
   [ "$package_path" = "$expected_path" ] || return 1
@@ -311,13 +292,11 @@ package_is_converged() {
   expected_version=$(package_version_for_source "$source_spec")
   manifest_matches "$package_path" "$expected_name" "$expected_version" || return 1
 
-  printf '%s\n' "$effective_state" |
-    "$jq_bin" -e '.requiredResourcesEnabled' >/dev/null 2>&1 || return 1
+  [ "$package_configuration_valid" = true ] || return 1
 
   case "$source_spec" in
     git:github.com/algal/pi-openai-server-compaction@*)
-      git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055' || return 1
-      compaction_dependencies_match "$package_path" "$source_spec"
+      git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055'
       ;;
     npm:*)
       npm_tree_matches "$package_path" "$source_spec"
@@ -331,25 +310,27 @@ package_is_converged() {
 list_output=$(list_packages)
 for source_spec in "${package_specs[@]}"; do
   package_identity_configured=false
+  package_configuration_valid=false
   if package_is_converged "$list_output" "$source_spec"; then
     printf 'pi-packages: %s is already converged\n' "$source_spec"
     continue
   fi
 
-  if [ "$package_identity_configured" = true ]; then
-    printf 'pi-packages: resetting effective configuration for reviewed source %s\n' "$source_spec"
-    PI_CODING_AGENT_DIR="$agent_dir" "$pi" remove "$source_spec"
+  if [ "$package_configuration_valid" = true ]; then
+    printf 'pi-packages: repairing reviewed source contents without changing configuration: %s\n' "$source_spec"
+    if ! "$node_bin" "$package_repairer" \
+      "$package_repair_sdk" "$agent_dir" "$source_spec"; then
+      printf 'pi-packages: unable to repair reviewed source contents: %s\n' "$source_spec" >&2
+      exit 1
+    fi
+  else
+    if [ "$package_identity_configured" = true ]; then
+      printf 'pi-packages: resetting effective configuration for reviewed source %s\n' "$source_spec"
+      PI_CODING_AGENT_DIR="$agent_dir" "$pi" remove "$source_spec"
+    fi
+    printf 'pi-packages: installing reviewed source %s\n' "$source_spec"
+    PI_CODING_AGENT_DIR="$agent_dir" "$pi" install "$source_spec"
   fi
-  printf 'pi-packages: installing reviewed source %s\n' "$source_spec"
-  PI_CODING_AGENT_DIR="$agent_dir" "$pi" install "$source_spec"
-  case "$source_spec" in
-    git:github.com/algal/pi-openai-server-compaction@*)
-      if ! install_compaction_dependencies "$(expected_install_path "$source_spec")" "$source_spec"; then
-        printf 'pi-packages: unable to install the reviewed compaction dependency graph\n' >&2
-        exit 1
-      fi
-      ;;
-  esac
   list_output=$(list_packages)
   if ! package_is_converged "$list_output" "$source_spec"; then
     printf 'pi-packages: source did not converge to its reviewed package path and pin: %s\n' "$source_spec" >&2

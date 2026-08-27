@@ -6,6 +6,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CONVERGER="$SCRIPT_DIR/agents/converge-pi-packages"
 EFFECTIVE_STATE_CHECKER="$SCRIPT_DIR/agents/pi-effective-package-state.mjs"
 INTEGRITY_CHECKER="$SCRIPT_DIR/agents/pi-package-integrity.mjs"
+PACKAGE_REPAIRER="$SCRIPT_DIR/agents/pi-repair-package.mjs"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/pi-packages-convergence-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 
@@ -14,7 +15,8 @@ runtime_bin="$TMP/restricted-bin"
 agent_dir="$TMP/agent"
 state="$TMP/fake-pi-state"
 calls="$TMP/calls"
-dependency_calls="$TMP/dependency-calls"
+repair_calls="$TMP/repair-calls"
+repair_sdk="$TMP/repair-sdk.mjs"
 integrity_contract="$TMP/pi-package-integrity.json"
 pi="$bin_dir/pi"
 mkdir -p "$bin_dir" "$runtime_bin" "$agent_dir" "$state"
@@ -34,18 +36,6 @@ cat > "$integrity_contract" <<'EOF'
     "npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6": {
       "npmIntegrity": "sha512-fixture-fast",
       "treeSha256": "381302bb618d2e46a3a273c59346f2be25a9f75a70377f32698cc7e6adac9931"
-    }
-  },
-  "gitPackages": {
-    "git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055": {
-      "runtimeDependencies": [
-        {
-          "name": "ws",
-          "version": "8.18.3",
-          "npmIntegrity": "sha512-fixture-ws",
-          "treeSha256": "8af94d59e0fc880f2f30ce9b9364b6edb3714eb9c358f7a546acdcd9cec8e0e0"
-        }
-      ]
     }
   }
 }
@@ -81,36 +71,6 @@ fi
 exit 97
 EOF
 chmod +x "$runtime_bin/git"
-
-cat > "$runtime_bin/npm" <<'EOF'
-#!/bin/bash
-set -euo pipefail
-: "${DEPENDENCY_CALLS:?}"
-prefix=
-dependency=
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --prefix)
-      prefix=${2:?}
-      shift 2
-      ;;
-    ws@*)
-      dependency=$1
-      shift
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-[ "$dependency" = 'ws@8.18.3' ] || exit 94
-[ -n "$prefix" ] || exit 93
-/bin/mkdir -p "$prefix/node_modules/ws"
-printf '%s\n' '{"name":"ws","version":"8.18.3"}' > "$prefix/node_modules/ws/package.json"
-printf '%s\n' 'module.exports = {};' > "$prefix/node_modules/ws/index.js"
-printf 'install %s\n' "$dependency" >> "$DEPENDENCY_CALLS"
-EOF
-chmod +x "$runtime_bin/npm"
 
 cat > "$pi" <<'EOF'
 #!/bin/bash
@@ -270,6 +230,61 @@ esac
 EOF
 chmod +x "$pi"
 
+cat > "$repair_sdk" <<'EOF'
+import { appendFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+
+function packagePath(agentDir, sourceSpec) {
+	if (sourceSpec.startsWith("npm:@llblab/pi-telegram@")) {
+		return join(agentDir, "npm/node_modules/@llblab/pi-telegram");
+	}
+	if (sourceSpec.startsWith("npm:pi-web-access@")) {
+		return join(agentDir, "npm/node_modules/pi-web-access");
+	}
+	if (sourceSpec.startsWith("npm:@ryan_nookpi/pi-extension-codex-fast-mode@")) {
+		return join(agentDir, "npm/node_modules/@ryan_nookpi/pi-extension-codex-fast-mode");
+	}
+	if (sourceSpec.startsWith("git:github.com/algal/pi-openai-server-compaction@")) {
+		return join(agentDir, "git/github.com/algal/pi-openai-server-compaction");
+	}
+	throw new Error(`unsupported fixture source: ${sourceSpec}`);
+}
+
+export class SettingsManager {
+	static inMemory(settings) {
+		return { settings };
+	}
+}
+
+export class DefaultPackageManager {
+	constructor({ agentDir, settingsManager }) {
+		this.agentDir = agentDir;
+		this.settingsManager = settingsManager;
+	}
+
+	async remove(sourceSpec) {
+		appendFileSync(
+			process.env.REPAIR_CALLS,
+			`remove ${sourceSpec} via ${JSON.stringify(this.settingsManager.settings.npmCommand)}\n`,
+		);
+		rmSync(packagePath(this.agentDir, sourceSpec), { recursive: true, force: true });
+	}
+
+	async install(sourceSpec) {
+		appendFileSync(
+			process.env.REPAIR_CALLS,
+			`install ${sourceSpec} via ${JSON.stringify(this.settingsManager.settings.npmCommand)}\n`,
+		);
+		const result = spawnSync(process.env.PI_FIXTURE_EXECUTABLE, ["install", sourceSpec], {
+			env: { ...process.env, PI_CODING_AGENT_DIR: this.agentDir },
+			stdio: "inherit",
+		});
+		if (result.status !== 0) throw new Error(`fixture install failed: ${result.status}`);
+	}
+}
+EOF
+
 fail() {
   printf 'pi-packages-convergence.test.sh: %s\n' "$*" >&2
   exit 1
@@ -289,11 +304,12 @@ assert_source_present() {
 }
 
 run_converger() {
-  PATH="$runtime_bin" CALLS="$calls" DEPENDENCY_CALLS="$dependency_calls" STATE="$state" \
+  PATH="$runtime_bin" CALLS="$calls" REPAIR_CALLS="$repair_calls" STATE="$state" \
+    PI_FIXTURE_EXECUTABLE="$pi" \
     PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
     PI_VERSION="${PI_VERSION:-0.84.3}" \
     /bin/bash "$CONVERGER" "$pi" "$agent_dir" "$EFFECTIVE_STATE_CHECKER" \
-      "$INTEGRITY_CHECKER" "$integrity_contract"
+      "$INTEGRITY_CHECKER" "$integrity_contract" "$PACKAGE_REPAIRER" "$repair_sdk"
 }
 
 [ -x /usr/bin/awk ] || fail 'macOS system awk is unavailable for the activation contract'
@@ -301,7 +317,8 @@ run_converger() {
 
 # Preserve captain-owned runtime files and an unrelated package while a fresh
 # agent directory receives all four reviewed packages.
-printf '%s\n' '{"packages":["npm:unrelated@9.9.9"]}' > "$agent_dir/settings.json"
+printf '%s\n' '{"packages":["npm:unrelated@9.9.9"],"npmCommand":["captain-npm","--pinned"]}' > \
+  "$agent_dir/settings.json"
 mkdir -p "$agent_dir/state"
 printf '%s\n' 'existing extension' > "$agent_dir/existing-extension.ts"
 printf '%s\n' 'captain telegram config' > "$agent_dir/telegram.json"
@@ -310,7 +327,7 @@ printf '%s\n' 'captain auth state' > "$agent_dir/auth.json"
 printf '%s\n' 'captain fast-mode state' > "$agent_dir/state/codex-fast-mode.json"
 printf '%s\n' 'captain compaction config' > "$agent_dir/openai-server-compaction.json"
 : > "$calls"
-: > "$dependency_calls"
+: > "$repair_calls"
 run_converger
 expected_calls=$(cat <<'EOF'
 install npm:@llblab/pi-telegram@0.39.2
@@ -320,7 +337,7 @@ install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6
 EOF
 )
 assert_eq "$expected_calls" "$(cat "$calls")"
-assert_eq 'install ws@8.18.3' "$(cat "$dependency_calls")"
+assert_eq '' "$(cat "$repair_calls")"
 assert_source_present 'npm:unrelated@9.9.9'
 assert_source_present 'npm:@llblab/pi-telegram@0.39.2'
 assert_source_present 'npm:pi-web-access@0.25.0'
@@ -355,16 +372,19 @@ assert_eq 'c6d593087709e9481223dc6c6c2269b371b5e055' \
 # A repeat activation is a no-op.
 run_converger
 assert_eq "$expected_calls" "$(cat "$calls")"
-assert_eq 'install ws@8.18.3' "$(cat "$dependency_calls")"
+assert_eq '' "$(cat "$repair_calls")"
 
 web_package_path="$agent_dir/npm/node_modules/pi-web-access"
 printf '%s\n' 'modified web extension' > "$web_package_path/index.ts"
 : > "$calls"
+: > "$repair_calls"
 run_converger
-assert_eq 'remove npm:pi-web-access@0.25.0
-install npm:pi-web-access@0.25.0' "$(cat "$calls")"
+assert_eq 'install npm:pi-web-access@0.25.0' "$(cat "$calls")"
 assert_eq 'export default function extension() {}' "$(cat "$web_package_path/index.ts")"
-assert_eq 'install ws@8.18.3' "$(cat "$dependency_calls")"
+assert_eq 'remove npm:pi-web-access@0.25.0 via ["captain-npm","--pinned"]
+install npm:pi-web-access@0.25.0 via ["captain-npm","--pinned"]' "$(cat "$repair_calls")"
+jq -e '.npmCommand == ["captain-npm", "--pinned"]' "$agent_dir/settings.json" >/dev/null \
+  || fail 'captain npmCommand changed during package repair'
 
 # Complete object-form filters preserve every reviewed capability entry point.
 for filtered_source in \
@@ -384,6 +404,21 @@ for filtered_source in \
   ' "$agent_dir/settings.json" >/dev/null || fail "complete filter was not preserved: $filtered_source"
 done
 
+printf '%s\n' 'modified filtered web extension' > "$web_package_path/index.ts"
+: > "$calls"
+: > "$repair_calls"
+run_converger
+assert_eq 'install npm:pi-web-access@0.25.0' "$(cat "$calls")"
+assert_eq 'export default function extension() {}' "$(cat "$web_package_path/index.ts")"
+jq -e '
+  any(.packages[]?;
+    type == "object"
+    and .source == "npm:pi-web-access@0.25.0"
+    and .extensions == ["index.ts"])
+' "$agent_dir/settings.json" >/dev/null || fail 'complete filter was lost during integrity repair'
+assert_eq 'remove npm:pi-web-access@0.25.0 via ["captain-npm","--pinned"]
+install npm:pi-web-access@0.25.0 via ["captain-npm","--pinned"]' "$(cat "$repair_calls")"
+
 jq '
   .packages = [.packages[] |
     if type == "object" and .source == "npm:@llblab/pi-telegram@0.39.2"
@@ -402,24 +437,19 @@ compaction_path="$agent_dir/git/github.com/algal/pi-openai-server-compaction"
 printf '%s\n' 'modified extension' > "$compaction_path/src/index.ts"
 : > "$compaction_path/.dirty"
 : > "$calls"
+: > "$repair_calls"
 run_converger
-assert_eq 'remove git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055
-install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055' "$(cat "$calls")"
+assert_eq 'install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055' "$(cat "$calls")"
 assert_eq 'export default function extension() {}' "$(cat "$compaction_path/src/index.ts")"
 [ ! -e "$compaction_path/.dirty" ] || fail 'dirty compaction checkout was not repaired'
-
-printf '%s\n' 'modified websocket runtime' > "$compaction_path/node_modules/ws/index.js"
-/bin/mkdir -p "$compaction_path/node_modules/unreviewed-runtime"
-printf '%s\n' '{"name":"unreviewed-runtime","version":"1.0.0"}' > \
-  "$compaction_path/node_modules/unreviewed-runtime/package.json"
-: > "$calls"
-run_converger
-assert_eq 'remove git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055
-install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055' "$(cat "$calls")"
-assert_eq 'module.exports = {};' "$(cat "$compaction_path/node_modules/ws/index.js")"
-assert_eq '8.18.3' "$(jq -r .version "$compaction_path/node_modules/ws/package.json")"
-[ ! -e "$compaction_path/node_modules/unreviewed-runtime" ] \
-  || fail 'unreviewed compaction runtime dependency was not removed'
+jq -e '
+  any(.packages[]?;
+    type == "object"
+    and .source == "git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055"
+    and .extensions == ["index.ts"])
+' "$agent_dir/settings.json" >/dev/null || fail 'compaction filter was lost during source repair'
+assert_eq 'remove git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055 via ["captain-npm","--pinned"]
+install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055 via ["captain-npm","--pinned"]' "$(cat "$repair_calls")"
 
 # Pi uses the first same-identity entry. A disabling filter followed by an
 # exact unfiltered duplicate is normalized to one active reviewed pin.
@@ -451,7 +481,7 @@ cat > "$agent_dir/settings.json" <<'EOF'
   "npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.5",
   "git:github.com/algal/pi-openai-server-compaction@old-ref",
   "npm:unrelated@9.9.9"
-]}
+],"npmCommand":["captain-npm","--pinned"]}
 EOF
 : > "$calls"
 printf '%s\n' '{"name":"@llblab/pi-telegram","version":"0.39.1","pi":{"extensions":["./index.ts"]}}' > \
@@ -494,10 +524,10 @@ bad_calls="$TMP/bad-calls"
 bad_agent="$TMP/bad-agent"
 mkdir -p "$bad_state" "$bad_agent"
 if PATH="$runtime_bin" CALLS="$bad_calls" STATE="$bad_state" PI_VERSION='0.84.4' \
-  DEPENDENCY_CALLS="$dependency_calls" \
+  REPAIR_CALLS="$repair_calls" PI_FIXTURE_EXECUTABLE="$pi" \
   PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
   /bin/bash "$CONVERGER" "$pi" "$bad_agent" "$EFFECTIVE_STATE_CHECKER" \
-    "$INTEGRITY_CHECKER" "$integrity_contract" \
+    "$INTEGRITY_CHECKER" "$integrity_contract" "$PACKAGE_REPAIRER" "$repair_sdk" \
     >"$TMP/incompatible.out" 2>"$TMP/incompatible.err"; then
   fail 'incompatible Pi version was accepted'
 fi
@@ -506,4 +536,4 @@ grep -Fq 'refusing reviewed package pins' "$TMP/incompatible.err" \
   || fail 'incompatible-version refusal was not reported'
 [ ! -e "$bad_agent/npm" ] || fail 'incompatible Pi version created package storage'
 
-printf 'ok - fresh install, idempotent repeat, authenticated package repair, exact compaction dependencies, filtered-entry repair, stale pin repair, unrelated-package preservation, restricted PATH, and incompatible-version refusal\n'
+printf 'ok - fresh install, idempotent repeat, authenticated package repair, complete-filter preservation, npmCommand preservation, filtered-entry repair, stale pin repair, unrelated-package preservation, restricted PATH, and incompatible-version refusal\n'

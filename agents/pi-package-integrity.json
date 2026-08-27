@@ -13,17 +13,5 @@
       "npmIntegrity": "sha512-DzJCqiXMnkAT77OjiGZm4y1nYPieTQzsjgR05O6+o43L4WrLrvxjUf360qBrNbNT2hGX6AbHvwC7fgXr0WrpmQ==",
       "treeSha256": "dbf8075b6ba30095de95837d9c036bb3f1950a6f1acc124d5f355fb9eb90b755"
     }
-  },
-  "gitPackages": {
-    "git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055": {
-      "runtimeDependencies": [
-        {
-          "name": "ws",
-          "version": "8.18.3",
-          "npmIntegrity": "sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==",
-          "treeSha256": "e4e1524feed149f98eb8184c20fbc8d8f05311a493fbcd48046fd5ce21fa9092"
-        }
-      ]
-    }
   }
 }

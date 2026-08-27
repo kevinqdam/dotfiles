@@ -60,32 +60,6 @@ function assertSha256(value, label) {
 	if (!/^[0-9a-f]{64}$/.test(value)) fail(`invalid ${label}: ${value}`);
 }
 
-function loadContract(contractPath) {
-	const contract = JSON.parse(readFileSync(contractPath, "utf8"));
-	if (contract.schemaVersion !== 1) fail(`unsupported contract schema: ${contract.schemaVersion}`);
-	return contract;
-}
-
-function installedDependencyNames(nodeModulesPath) {
-	const names = [];
-	for (const name of sortedNames(nodeModulesPath)) {
-		if (name === ".package-lock.json") continue;
-		const entryPath = join(nodeModulesPath, name);
-		const stat = lstatSync(entryPath);
-		if (!stat.isDirectory()) fail(`unexpected dependency-graph entry: ${entryPath}`);
-		if (name.startsWith("@")) {
-			for (const scopedName of sortedNames(entryPath)) {
-				const scopedPath = join(entryPath, scopedName);
-				if (!lstatSync(scopedPath).isDirectory()) fail(`unexpected scoped dependency entry: ${scopedPath}`);
-				names.push(`${name}/${scopedName}`);
-			}
-		} else {
-			names.push(name);
-		}
-	}
-	return names;
-}
-
 if (command === "digest") {
 	const [root, ...excludedEntries] = arguments_;
 	if (!root) fail("usage: digest <tree-root> [excluded-root-entry ...]");
@@ -95,27 +69,6 @@ if (command === "digest") {
 	if (!root || !expectedDigest) fail("usage: verify-tree <tree-root> <sha256> [excluded-root-entry ...]");
 	assertSha256(expectedDigest, "tree digest");
 	if (treeDigest(root, new Set(excludedEntries)) !== expectedDigest) process.exit(1);
-} else if (command === "verify-dependency-graph") {
-	const [packageRoot, contractPath, sourceSpec] = arguments_;
-	if (!packageRoot || !contractPath || !sourceSpec) {
-		fail("usage: verify-dependency-graph <package-root> <contract> <source>");
-	}
-	const contract = loadContract(contractPath);
-	const dependencies = contract.gitPackages?.[sourceSpec]?.runtimeDependencies;
-	if (!Array.isArray(dependencies) || dependencies.length === 0) fail(`missing dependency contract: ${sourceSpec}`);
-	const nodeModulesPath = join(packageRoot, "node_modules");
-	const installedNames = installedDependencyNames(nodeModulesPath);
-	const expectedNames = dependencies.map(({ name }) => name).sort();
-	if (JSON.stringify(installedNames) !== JSON.stringify(expectedNames)) process.exit(1);
-	for (const dependency of dependencies) {
-		const { name, version, treeSha256 } = dependency;
-		if (!name || !version || !treeSha256) fail(`invalid dependency contract: ${sourceSpec}`);
-		assertSha256(treeSha256, `${name} tree digest`);
-		const dependencyRoot = join(nodeModulesPath, ...name.split("/"));
-		const manifest = JSON.parse(readFileSync(join(dependencyRoot, "package.json"), "utf8"));
-		if (manifest.name !== name || manifest.version !== version) process.exit(1);
-		if (treeDigest(dependencyRoot, new Set(["node_modules"])) !== treeSha256) process.exit(1);
-	}
 } else {
-	fail("usage: <digest|verify-tree|verify-dependency-graph> ...");
+	fail("usage: <digest|verify-tree> ...");
 }
