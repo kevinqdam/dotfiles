@@ -5,6 +5,7 @@ import {
 	readFileSync,
 	readdirSync,
 	readlinkSync,
+	statSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
@@ -22,7 +23,7 @@ function sortedNames(directory) {
 }
 
 function treeDigest(root, excludedRootEntries = new Set()) {
-	const rootStat = lstatSync(root);
+	const rootStat = statSync(root);
 	if (!rootStat.isDirectory()) fail(`tree root is not a directory: ${root}`);
 	const hash = createHash("sha256");
 
@@ -85,10 +86,13 @@ function findDependencyManifest(packageRoot, dependency) {
 	let nodeModulesDirectory = directory;
 	while (basename(nodeModulesDirectory) !== "node_modules") {
 		const parent = dirname(nodeModulesDirectory);
-		if (parent === nodeModulesDirectory) fail(`package is outside node_modules: ${packageRoot}`);
+		if (parent === nodeModulesDirectory) {
+			nodeModulesDirectory = undefined;
+			break;
+		}
 		nodeModulesDirectory = parent;
 	}
-	const installRoot = dirname(nodeModulesDirectory);
+	const installRoot = nodeModulesDirectory ? dirname(nodeModulesDirectory) : directory;
 	while (true) {
 		const candidate = join(directory, "node_modules", ...pathParts, "package.json");
 		try {

@@ -210,6 +210,9 @@ case "${1:-}" in
           printf '%s\n' '{"name":"linkedom","version":"0.18.12"}' > \
             "$PI_CODING_AGENT_DIR/npm/node_modules/linkedom/package.json"
         fi
+        if [ -e "$STATE/web-incomplete-repair" ]; then
+          /bin/rm -f "$(package_path "$source_spec")/index.ts"
+        fi
         ;;
       npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6)
         replace_configured_source "$source_spec"
@@ -219,6 +222,10 @@ case "${1:-}" in
         replace_configured_source "$source_spec"
         package_path=$(package_path "$source_spec")
         write_manifest "$package_path" 'pi-openai-server-compaction' '0.1.0' './src/index.ts'
+        jq '.dependencies = {ws: "^8.18.0"}' "$package_path/package.json" > "$STATE/compaction-package.tmp"
+        /bin/mv "$STATE/compaction-package.tmp" "$package_path/package.json"
+        /bin/mkdir -p "$package_path/node_modules/ws"
+        printf '%s\n' '{"name":"ws","version":"8.18.3"}' > "$package_path/node_modules/ws/package.json"
         printf '%s\n' 'c6d593087709e9481223dc6c6c2269b371b5e055' > "$package_path/.head"
         /bin/rm -f "$package_path/.dirty"
         ;;
@@ -301,6 +308,15 @@ fail() {
   printf 'pi-packages-convergence.test.sh: %s\n' "$*" >&2
   exit 1
 }
+
+pnpm_store_package="$TMP/pnpm-store/package"
+pnpm_link="$TMP/pnpm-install/node_modules/example-package"
+mkdir -p "$pnpm_store_package" "${pnpm_link%/*}"
+printf '%s\n' '{"name":"example-package","version":"1.0.0"}' > "$pnpm_store_package/package.json"
+printf '%s\n' 'export default true' > "$pnpm_store_package/index.ts"
+ln -s "$pnpm_store_package" "$pnpm_link"
+pnpm_digest=$(node "$INTEGRITY_CHECKER" digest "$pnpm_store_package" node_modules)
+node "$INTEGRITY_CHECKER" verify-tree "$pnpm_link" "$pnpm_digest" node_modules
 
 normalizer_agent="$TMP/normalizer-agent"
 normalizer_settings="$TMP/normalizer-settings.json"
@@ -464,6 +480,46 @@ for filtered_source in \
   ' "$agent_dir/settings.json" >/dev/null || fail "complete filter was not preserved: $filtered_source"
 done
 
+local_web_extension="$state/local-web-index.ts"
+ln -s "$web_package_path/index.ts" "$local_web_extension"
+jq --arg extension "$local_web_extension" '.extensions = [$extension]' \
+  "$agent_dir/settings.json" > "$state/settings.tmp"
+/bin/mv "$state/settings.tmp" "$agent_dir/settings.json"
+: > "$calls"
+: > "$repair_calls"
+run_converger
+assert_eq '' "$(cat "$calls")"
+assert_eq '' "$(cat "$repair_calls")"
+jq -e '
+  any(.packages[]?;
+    type == "object"
+    and .source == "npm:pi-web-access@0.25.0"
+    and .extensions == ["index.ts"])
+' "$agent_dir/settings.json" >/dev/null || fail 'same-path local precedence changed the complete filter'
+jq 'del(.extensions)' "$agent_dir/settings.json" > "$state/settings.tmp"
+/bin/mv "$state/settings.tmp" "$agent_dir/settings.json"
+
+: > "$state/web-incomplete-repair"
+/bin/rm -f "$web_package_path/index.ts"
+: > "$calls"
+: > "$repair_calls"
+if run_converger >"$state/incomplete-repair.out" 2>"$state/incomplete-repair.err"; then
+  fail 'incomplete content repair unexpectedly converged'
+fi
+jq -e '
+  any(.packages[]?;
+    type == "object"
+    and .source == "npm:pi-web-access@0.25.0"
+    and .extensions == ["index.ts"])
+' "$agent_dir/settings.json" >/dev/null || fail 'failed content repair stripped the complete filter'
+grep -Fq 'reviewed source contents remain invalid after repair' "$state/incomplete-repair.err" \
+  || fail 'incomplete content repair did not report its failure'
+/bin/rm -f "$state/web-incomplete-repair"
+: > "$calls"
+: > "$repair_calls"
+run_converger
+assert_eq 'install npm:pi-web-access@0.25.0' "$(cat "$calls")"
+
 /bin/rm -f "$web_package_path/index.ts"
 : > "$calls"
 : > "$repair_calls"
@@ -527,6 +583,16 @@ jq -e '
 ' "$agent_dir/settings.json" >/dev/null || fail 'compaction filter was lost during source repair'
 assert_eq 'remove git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055 via ["captain-npm","--pinned"]
 install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055 via ["captain-npm","--pinned"]' "$(cat "$repair_calls")"
+
+/bin/rm -rf "$compaction_path/node_modules/ws"
+: > "$calls"
+: > "$repair_calls"
+run_converger
+assert_eq 'install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055' "$(cat "$calls")"
+assert_eq 'remove git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055 via ["captain-npm","--pinned"]
+install git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055 via ["captain-npm","--pinned"]' "$(cat "$repair_calls")"
+[ -f "$compaction_path/node_modules/ws/package.json" ] \
+  || fail 'missing compaction runtime dependency was not repaired'
 
 # Pi uses the first same-identity entry. A disabling filter followed by an
 # exact unfiltered duplicate is normalized to one active reviewed pin.
@@ -615,4 +681,4 @@ grep -Fq 'refusing reviewed package pins' "$TMP/incompatible.err" \
   || fail 'incompatible-version refusal was not reported'
 [ ! -e "$bad_agent/npm" ] || fail 'incompatible Pi version created package storage'
 
-printf 'ok - fresh install, idempotent repeat, runtime dependency repair, authenticated package repair, complete-filter preservation, npmCommand preservation, filtered-entry repair, stale pin repair, unrelated-package preservation, restricted PATH, and incompatible-version refusal\n'
+printf 'ok - fresh install, idempotent repeat, npm and Git runtime dependency repair, pnpm symlink support, authenticated package repair, complete-filter preservation, local-resource precedence, failed-repair preservation, npmCommand preservation, filtered-entry repair, stale pin repair, unrelated-package preservation, restricted PATH, and incompatible-version refusal\n'

@@ -311,7 +311,8 @@ package_is_converged() {
 
   case "$source_spec" in
     git:github.com/algal/pi-openai-server-compaction@*)
-      if git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055'; then
+      if git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055' &&
+        "$node_bin" "$integrity_checker" verify-dependencies "$package_path" >/dev/null 2>&1; then
         package_contents_valid=true
       fi
       ;;
@@ -353,6 +354,10 @@ for source_spec in "${package_specs[@]}"; do
     if package_is_converged "$list_output" "$source_spec"; then
       printf 'pi-packages: %s converged after source repair\n' "$source_spec"
       continue
+    fi
+    if [ "$package_contents_valid" != true ]; then
+      printf 'pi-packages: reviewed source contents remain invalid after repair: %s\n' "$source_spec" >&2
+      exit 1
     fi
   fi
 

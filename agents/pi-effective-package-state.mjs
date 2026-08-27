@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -33,23 +34,57 @@ const firstConfiguredSourceReviewed = configuredEntries[0]?.source === sourceSpe
 const allConfiguredSourcesReviewed =
 	identityConfigured && configuredEntries.every((entry) => entry.source === sourceSpec);
 const resources = await packageManager.resolve(async () => "skip");
+const sourceOf = (entry) => (typeof entry === "string" ? entry : entry?.source);
+const firstMatchingPackage = settingsManager
+	.getPackages()
+	.find(
+		(entry) =>
+			typeof sourceOf(entry) === "string" &&
+			packageManager.getPackageIdentity(sourceOf(entry), "user") === reviewedIdentity,
+	);
+let managedResources;
+if (firstMatchingPackage) {
+	const managedSettingsManager = SettingsManager.inMemory(
+		{ packages: [firstMatchingPackage] },
+		{ projectTrusted: false },
+	);
+	const managedPackageManager = new DefaultPackageManager({
+		cwd: agentDir,
+		agentDir,
+		settingsManager: managedSettingsManager,
+	});
+	managedResources = await managedPackageManager.resolve(async () => "skip");
+}
+const canonicalPath = (path) => {
+	try {
+		return realpathSync(path);
+	} catch {
+		return resolve(path);
+	}
+};
 const requiredResources = [];
 for (let index = 0; index < resourceArguments.length; index += 2) {
 	const resourceType = resourceArguments[index];
 	const resourcePath = resourceArguments[index + 1];
 	if (!Object.hasOwn(resources, resourceType)) throw new Error(`unknown Pi resource type: ${resourceType}`);
-	requiredResources.push({ resourceType, resourcePath: resolve(resourcePath) });
+	requiredResources.push({ resourceType, resourcePath: canonicalPath(resourcePath) });
 }
-const requiredResourcesEnabled = requiredResources.every(({ resourceType, resourcePath }) =>
-	resources[resourceType].some(
-		(entry) =>
-			resolve(entry.path) === resourcePath &&
-			entry.enabled === true &&
-			entry.metadata.source === sourceSpec &&
-			entry.metadata.origin === "package" &&
-			entry.metadata.scope === "user",
-	),
-);
+const requiredResourcesEnabled =
+	managedResources !== undefined &&
+	requiredResources.every(({ resourceType, resourcePath }) => {
+		const managedResourceEnabled = managedResources[resourceType].some(
+			(entry) =>
+				canonicalPath(entry.path) === resourcePath &&
+				entry.enabled === true &&
+				entry.metadata.source === sourceSpec &&
+				entry.metadata.origin === "package" &&
+				entry.metadata.scope === "user",
+		);
+		const effectiveResourceEnabled = resources[resourceType].some(
+			(entry) => canonicalPath(entry.path) === resourcePath && entry.enabled === true,
+		);
+		return managedResourceEnabled && effectiveResourceEnabled;
+	});
 
 process.stdout.write(
 	JSON.stringify({
