@@ -1,0 +1,385 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -lt 2 ] || [ "$#" -gt 8 ]; then
+  printf 'usage: %s <pi-executable> <agent-directory> [effective-state-checker] [integrity-checker] [integrity-contract] [package-repairer] [package-normalizer] [package-repair-sdk]\n' "$0" >&2
+  exit 2
+fi
+
+pi=$1
+agent_dir=$2
+effective_state_checker=${3:-${0%/*}/pi-effective-package-state.mjs}
+integrity_checker=${4:-${0%/*}/pi-package-integrity.mjs}
+integrity_contract=${5:-${0%/*}/pi-package-integrity.json}
+package_repairer=${6:-${0%/*}/pi-repair-package.mjs}
+package_normalizer=${7:-${0%/*}/pi-normalize-package.mjs}
+while [ "$agent_dir" != "/" ] && [ "${agent_dir%/}" != "$agent_dir" ]; do
+  agent_dir=${agent_dir%/}
+done
+if [ -d "$agent_dir" ]; then
+  if ! agent_dir=$(cd "$agent_dir" && pwd -P); then
+    printf 'pi-packages: unable to resolve the Pi agent directory: %s\n' "$2" >&2
+    exit 1
+  fi
+else
+  if ! /bin/mkdir -p "$agent_dir"; then
+    printf 'pi-packages: unable to create the Pi agent directory: %s\n' "$2" >&2
+    exit 1
+  fi
+  if ! agent_dir=$(cd "$agent_dir" && pwd -P); then
+    printf 'pi-packages: unable to resolve the Pi agent directory: %s\n' "$2" >&2
+    exit 1
+  fi
+fi
+reviewed_pi_version='0.84.3'
+awk_bin=/usr/bin/awk
+jq_bin=jq
+git_bin=git
+node_bin=node
+
+# These are the reviewed package sources. Keep the exact npm versions and git
+# commit fixed here so activation never follows a mutable release or branch.
+package_specs=(
+  'npm:@llblab/pi-telegram@0.39.2'
+  'npm:pi-web-access@0.25.0'
+  'npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6'
+  'git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055'
+)
+
+if [ ! -x "$pi" ]; then
+  printf 'pi-packages: Pi executable is unavailable: %s\n' "$pi" >&2
+  exit 1
+fi
+if [ ! -x "$awk_bin" ]; then
+  printf 'pi-packages: macOS awk executable is unavailable: %s\n' "$awk_bin" >&2
+  exit 1
+fi
+if ! command -v "$jq_bin" >/dev/null 2>&1; then
+  printf 'pi-packages: jq is unavailable in the activation PATH\n' >&2
+  exit 1
+fi
+if ! command -v "$git_bin" >/dev/null 2>&1; then
+  printf 'pi-packages: git is unavailable in the activation PATH\n' >&2
+  exit 1
+fi
+if ! command -v "$node_bin" >/dev/null 2>&1; then
+  printf 'pi-packages: node is unavailable in the activation PATH\n' >&2
+  exit 1
+fi
+if [ -n "${PI_PACKAGE_MANAGER_SDK:-}" ]; then
+  pi_package_manager_sdk=$PI_PACKAGE_MANAGER_SDK
+else
+  if ! pi_real=$(/usr/bin/readlink -f "$pi"); then
+    printf 'pi-packages: unable to resolve the Pi executable: %s\n' "$pi" >&2
+    exit 1
+  fi
+  pi_prefix=${pi_real%/bin/pi}
+  pi_package_manager_sdk="$pi_prefix/libexec/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
+fi
+package_repair_sdk=${8:-$pi_package_manager_sdk}
+if [ ! -f "$pi_package_manager_sdk" ]; then
+  printf 'pi-packages: installed Pi package-manager SDK is unavailable: %s\n' "$pi_package_manager_sdk" >&2
+  exit 1
+fi
+if [ ! -f "$effective_state_checker" ]; then
+  printf 'pi-packages: effective package-state checker is unavailable: %s\n' "$effective_state_checker" >&2
+  exit 1
+fi
+if [ ! -f "$integrity_checker" ]; then
+  printf 'pi-packages: package-integrity checker is unavailable: %s\n' "$integrity_checker" >&2
+  exit 1
+fi
+if [ ! -f "$integrity_contract" ]; then
+  printf 'pi-packages: package-integrity contract is unavailable: %s\n' "$integrity_contract" >&2
+  exit 1
+fi
+if [ ! -f "$package_repairer" ]; then
+  printf 'pi-packages: package repairer is unavailable: %s\n' "$package_repairer" >&2
+  exit 1
+fi
+if [ ! -f "$package_normalizer" ]; then
+  printf 'pi-packages: package normalizer is unavailable: %s\n' "$package_normalizer" >&2
+  exit 1
+fi
+if [ ! -f "$package_repair_sdk" ]; then
+  printf 'pi-packages: package repair SDK is unavailable: %s\n' "$package_repair_sdk" >&2
+  exit 1
+fi
+if ! "$jq_bin" -e '
+  .schemaVersion == 1
+  and (.npmPackages | type == "object")
+' "$integrity_contract" >/dev/null 2>&1; then
+  printf 'pi-packages: package-integrity contract is invalid: %s\n' "$integrity_contract" >&2
+  exit 1
+fi
+
+# The compaction source was proven against this Pi release in an isolated agent
+# directory. Refuse all reviewed package changes when that compatibility anchor
+# is not the installed Pi, rather than installing an unreviewed combination.
+if ! installed_pi_version=$(PI_CODING_AGENT_DIR="$agent_dir" "$pi" --version); then
+  printf 'pi-packages: unable to determine the installed Pi version\n' >&2
+  exit 1
+fi
+if [ "$installed_pi_version" != "$reviewed_pi_version" ]; then
+  printf 'pi-packages: refusing reviewed package pins for Pi %s; compatibility was established only for Pi %s\n' \
+    "$installed_pi_version" "$reviewed_pi_version" >&2
+  exit 1
+fi
+
+list_packages() {
+  PI_CODING_AGENT_DIR="$agent_dir" "$pi" list
+}
+
+# Pi's list output is the public package-manager view of configured sources and
+# their install paths.
+installed_path_for_source() {
+  list_output=$1
+  source_spec=$2
+  expected_path=$3
+  # shellcheck disable=SC2016
+  printf '%s\n' "$list_output" |
+    "$awk_bin" -v spec="$source_spec" -v expected="$expected_path" '
+      $0 == "User packages:" { user_packages = 1; next }
+      $0 == "Project packages:" { user_packages = 0; next }
+      user_packages && ($0 == "  " spec || $0 == "  " spec " (filtered)") { package_seen = 1; next }
+      package_seen && $0 ~ /^    / {
+        path = substr($0, 5)
+        if (path == expected) { print path; found = 1; exit }
+        if (fallback == "") fallback = path
+        package_seen = 0
+        next
+      }
+      package_seen { package_seen = 0 }
+      END { if (!found && fallback != "") print fallback }
+    '
+}
+
+package_name_for_source() {
+  case "$1" in
+    npm:@llblab/pi-telegram@*)
+      printf '%s\n' '@llblab/pi-telegram'
+      ;;
+    npm:pi-web-access@*)
+      printf '%s\n' 'pi-web-access'
+      ;;
+    npm:@ryan_nookpi/pi-extension-codex-fast-mode@*)
+      printf '%s\n' '@ryan_nookpi/pi-extension-codex-fast-mode'
+      ;;
+    git:github.com/algal/pi-openai-server-compaction@*)
+      printf '%s\n' 'pi-openai-server-compaction'
+      ;;
+    *)
+      printf 'pi-packages: unknown reviewed package source: %s\n' "$1" >&2
+      return 1
+      ;;
+  esac
+}
+
+package_version_for_source() {
+  case "$1" in
+    npm:@llblab/pi-telegram@*) printf '%s\n' '0.39.2' ;;
+    npm:pi-web-access@*) printf '%s\n' '0.25.0' ;;
+    npm:@ryan_nookpi/pi-extension-codex-fast-mode@*) printf '%s\n' '0.2.6' ;;
+    git:github.com/algal/pi-openai-server-compaction@*) printf '%s\n' '0.1.0' ;;
+    *)
+      printf 'pi-packages: unknown reviewed package source: %s\n' "$1" >&2
+      return 1
+      ;;
+  esac
+}
+
+expected_install_path() {
+  source_spec=$1
+  case "$source_spec" in
+    npm:*)
+      package_name=$(package_name_for_source "$source_spec")
+      printf '%s\n' "$agent_dir/npm/node_modules/$package_name"
+      ;;
+    git:github.com/algal/pi-openai-server-compaction@*)
+      printf '%s\n' "$agent_dir/git/github.com/algal/pi-openai-server-compaction"
+      ;;
+    *)
+      printf 'pi-packages: unknown reviewed package source: %s\n' "$source_spec" >&2
+      return 1
+      ;;
+  esac
+}
+
+expected_extension_path() {
+  source_spec=$1
+  package_path=$(expected_install_path "$source_spec")
+  case "$source_spec" in
+    git:github.com/algal/pi-openai-server-compaction@*)
+      printf '%s\n' "$package_path/src/index.ts"
+      ;;
+    npm:*)
+      printf '%s\n' "$package_path/index.ts"
+      ;;
+    *)
+      printf 'pi-packages: unknown reviewed package source: %s\n' "$source_spec" >&2
+      return 1
+      ;;
+  esac
+}
+
+manifest_matches() {
+  package_path=$1
+  expected_name=$2
+  expected_version=$3
+  [ -f "$package_path/package.json" ] || return 1
+  # shellcheck disable=SC2016
+  "$jq_bin" -e \
+    --arg expected_name "$expected_name" \
+    --arg expected_version "$expected_version" \
+    '.name == $expected_name and .version == $expected_version' \
+    "$package_path/package.json" >/dev/null 2>&1
+}
+
+git_checkout_matches() {
+  package_path=$1
+  expected_commit=$2
+  [ -d "$package_path" ] || return 1
+  if ! installed_commit=$("$git_bin" -C "$package_path" rev-parse HEAD 2>/dev/null); then
+    return 1
+  fi
+  [ "$installed_commit" = "$expected_commit" ] || return 1
+  if ! checkout_status=$("$git_bin" -C "$package_path" status --porcelain=v1 --untracked-files=no 2>/dev/null); then
+    return 1
+  fi
+  [ -z "$checkout_status" ]
+}
+
+npm_tree_matches() {
+  package_path=$1
+  source_spec=$2
+  # shellcheck disable=SC2016
+  if ! expected_digest=$("$jq_bin" -er --arg source "$source_spec" \
+    '.npmPackages[$source].treeSha256' "$integrity_contract" 2>/dev/null); then
+    return 1
+  fi
+  "$node_bin" "$integrity_checker" verify-tree \
+    "$package_path" "$expected_digest" node_modules >/dev/null 2>&1 || return 1
+  "$node_bin" "$integrity_checker" verify-dependencies \
+    "$package_path" >/dev/null 2>&1
+}
+
+package_is_converged() {
+  list_output=$1
+  source_spec=$2
+  expected_path=$(expected_install_path "$source_spec")
+  expected_extension=$(expected_extension_path "$source_spec")
+  required_resources=(extensions "$expected_extension")
+  case "$source_spec" in
+    npm:@llblab/pi-telegram@*)
+      required_resources+=(
+        skills "$expected_path/skills/generated-control-surface/SKILL.md"
+        skills "$expected_path/skills/generative-apps/SKILL.md"
+        skills "$expected_path/skills/telegram-bridge/SKILL.md"
+      )
+      ;;
+  esac
+  effective_state=$("$node_bin" "$effective_state_checker" \
+    "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "${required_resources[@]}") || return 1
+  package_identity_configured=$(printf '%s\n' "$effective_state" |
+    "$jq_bin" -r '.identityConfigured') || return 1
+  package_first_source_reviewed=$(printf '%s\n' "$effective_state" |
+    "$jq_bin" -r '.firstConfiguredSourceReviewed') || return 1
+  package_sources_reviewed=$(printf '%s\n' "$effective_state" |
+    "$jq_bin" -r '.allConfiguredSourcesReviewed') || return 1
+  package_configuration_valid=$(printf '%s\n' "$effective_state" |
+    "$jq_bin" -r '.requiredResourcesEnabled') || return 1
+  for package_state in \
+    "$package_identity_configured" \
+    "$package_first_source_reviewed" \
+    "$package_sources_reviewed" \
+    "$package_configuration_valid"; do
+    case "$package_state" in
+      true|false) ;;
+      *) return 1 ;;
+    esac
+  done
+  if [ "$package_identity_configured" != true ]; then
+    package_configuration_valid=false
+    return 1
+  fi
+  package_path=$(installed_path_for_source "$list_output" "$source_spec" "$expected_path")
+  [ -n "$package_path" ] || return 1
+  [ "$package_path" = "$expected_path" ] || return 1
+
+  expected_name=$(package_name_for_source "$source_spec")
+  expected_version=$(package_version_for_source "$source_spec")
+  manifest_matches "$package_path" "$expected_name" "$expected_version" || return 1
+
+  case "$source_spec" in
+    git:github.com/algal/pi-openai-server-compaction@*)
+      if git_checkout_matches "$package_path" 'c6d593087709e9481223dc6c6c2269b371b5e055' &&
+        "$node_bin" "$integrity_checker" verify-dependencies "$package_path" >/dev/null 2>&1; then
+        package_contents_valid=true
+      fi
+      ;;
+    npm:*)
+      if npm_tree_matches "$package_path" "$source_spec"; then
+        package_contents_valid=true
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  [ "$package_sources_reviewed" = true ] &&
+    [ "$package_configuration_valid" = true ] &&
+    [ "$package_contents_valid" = true ]
+}
+
+list_output=$(list_packages)
+for source_spec in "${package_specs[@]}"; do
+  package_identity_configured=false
+  package_first_source_reviewed=false
+  package_sources_reviewed=false
+  package_configuration_valid=false
+  package_contents_valid=false
+  if package_is_converged "$list_output" "$source_spec"; then
+    printf 'pi-packages: %s is already converged\n' "$source_spec"
+    continue
+  fi
+
+  if [ "$package_first_source_reviewed" = true ] && [ "$package_contents_valid" != true ]; then
+    printf 'pi-packages: repairing reviewed source contents without changing configuration: %s\n' "$source_spec"
+    if ! "$node_bin" "$package_repairer" \
+      "$package_repair_sdk" "$agent_dir" "$source_spec"; then
+      printf 'pi-packages: unable to repair reviewed source contents: %s\n' "$source_spec" >&2
+      exit 1
+    fi
+    list_output=$(list_packages)
+    package_contents_valid=false
+    if package_is_converged "$list_output" "$source_spec"; then
+      printf 'pi-packages: %s converged after source repair\n' "$source_spec"
+      continue
+    fi
+    if [ "$package_contents_valid" != true ]; then
+      printf 'pi-packages: reviewed source contents remain invalid after repair: %s\n' "$source_spec" >&2
+      exit 1
+    fi
+  fi
+
+  if [ "$package_first_source_reviewed" = true ]; then
+    printf 'pi-packages: normalizing reviewed source configuration: %s\n' "$source_spec"
+    if ! "$node_bin" "$package_normalizer" \
+      "$pi_package_manager_sdk" "$agent_dir" "$source_spec" "$package_configuration_valid"; then
+      printf 'pi-packages: unable to normalize reviewed source configuration: %s\n' "$source_spec" >&2
+      exit 1
+    fi
+  else
+    if [ "$package_identity_configured" = true ]; then
+      printf 'pi-packages: resetting effective configuration for reviewed source %s\n' "$source_spec"
+      PI_CODING_AGENT_DIR="$agent_dir" "$pi" remove "$source_spec"
+    fi
+    printf 'pi-packages: installing reviewed source %s\n' "$source_spec"
+    PI_CODING_AGENT_DIR="$agent_dir" "$pi" install "$source_spec"
+  fi
+  list_output=$(list_packages)
+  if ! package_is_converged "$list_output" "$source_spec"; then
+    printf 'pi-packages: source did not converge to its reviewed package path and pin: %s\n' "$source_spec" >&2
+    exit 1
+  fi
+done

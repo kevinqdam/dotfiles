@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "npmPackages": {
+    "npm:@llblab/pi-telegram@0.39.2": {
+      "npmIntegrity": "sha512-SzleYw69R62QsGLQTLSw/do5XmbRp6uHy612FnVFjFAH5sZZ3zlIFpmHCTVr2kO1eAjwUWW5LCnmS5fuLzdLlg==",
+      "treeSha256": "e482b7f347eff6d0151617710f2605042a69df980094b724a1c6e74b5ac46179"
+    },
+    "npm:pi-web-access@0.25.0": {
+      "npmIntegrity": "sha512-DYOEIMEPwpC6pHElexBy3XuaYPnfMxH0ZBaGrILFsLNQzhhHJ3kJLrCQU4fnKXYXV6OEwxsLt2pBP76koK4hHg==",
+      "treeSha256": "610836f64286dd7975908ee5192c01979fd0550414237fd86967a9310ad3c87d"
+    },
+    "npm:@ryan_nookpi/pi-extension-codex-fast-mode@0.2.6": {
+      "npmIntegrity": "sha512-DzJCqiXMnkAT77OjiGZm4y1nYPieTQzsjgR05O6+o43L4WrLrvxjUf360qBrNbNT2hGX6AbHvwC7fgXr0WrpmQ==",
+      "treeSha256": "dbf8075b6ba30095de95837d9c036bb3f1950a6f1acc124d5f355fb9eb90b755"
+    }
+  }
+}

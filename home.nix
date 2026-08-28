@@ -1,6 +1,7 @@
 { config, lib, pkgs, ... }:
 let
   firstmateToolchain = import ./nix/firstmate-toolchain.nix { inherit pkgs; };
+  piWithVim = import ./nix/pi-with-vim.nix { inherit pkgs; };
   firstmateConfigMaterializer = pkgs.stdenv.mkDerivation {
     pname = "firstmate-config-materializer";
     version = "1.0.0";
@@ -57,6 +58,7 @@ in {
     firstmateToolchain.axiTools
     firstmateToolchain.noMistakes
     firstmateToolchain.treehouse
+    piWithVim
   ];
 
   programs.git = {
@@ -117,14 +119,22 @@ in {
   '';
 
   # Homebrew installs Pi before Home Manager activation. Let Pi own its
-  # ordinary-writable package settings and storage; do not link connector
-  # configuration or runtime state into the declarative profile.
-  home.activation.piTelegramPackage = lib.hm.dag.entryAfter [ "firstmateConfig" ] ''
-    PATH="/opt/homebrew/bin:${pkgs.nodejs_22}/bin:${pkgs.jq}/bin:$PATH"
+  # ordinary-writable package settings and storage; do not link connector,
+  # provider, or runtime configuration into the declarative profile.
+  home.activation.piPackages = lib.hm.dag.entryAfter [ "firstmateConfig" ] ''
+    # Home Manager activation runs with a restricted PATH. Include the
+    # declarative Git runtime explicitly because Pi's Git package source needs
+    # it even when the user's profile or ambient shell PATH is unavailable.
+    PATH="/opt/homebrew/bin:${pkgs.nodejs_22}/bin:${pkgs.jq}/bin:${pkgs.git}/bin:$PATH"
     export PATH
-    ${./agents/converge-pi-telegram} \
+    ${./agents/converge-pi-packages} \
       "/opt/homebrew/bin/pi" \
-      "${config.home.homeDirectory}/.pi/agent"
+      "${config.home.homeDirectory}/.pi/agent" \
+      "${./agents/pi-effective-package-state.mjs}" \
+      "${./agents/pi-package-integrity.mjs}" \
+      "${./agents/pi-package-integrity.json}" \
+      "${./agents/pi-repair-package.mjs}" \
+      "${./agents/pi-normalize-package.mjs}"
   '';
 
   # Global Pi integration. It is inert until /firstmate is invoked.
