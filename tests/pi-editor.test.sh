@@ -27,6 +27,7 @@ printf '<%s>\n' "$@"
 EOF
 chmod +x "$fake_pi"
 
+# shellcheck disable=SC2016
 wrapper=$(FAKE_PI="$fake_pi" nix build --impure --no-link --print-out-paths --expr '
   let
     flake = builtins.getFlake (toString ./.);

@@ -252,6 +252,7 @@ git_checkout_matches() {
 npm_tree_matches() {
   package_path=$1
   source_spec=$2
+  # shellcheck disable=SC2016
   if ! expected_digest=$("$jq_bin" -er --arg source "$source_spec" \
     '.npmPackages[$source].treeSha256' "$integrity_contract" 2>/dev/null); then
     return 1
