@@ -122,7 +122,10 @@ in {
   # ordinary-writable package settings and storage; do not link connector,
   # provider, or runtime configuration into the declarative profile.
   home.activation.piPackages = lib.hm.dag.entryAfter [ "firstmateConfig" ] ''
-    PATH="/opt/homebrew/bin:${pkgs.nodejs_22}/bin:${pkgs.jq}/bin:$PATH"
+    # Home Manager activation runs with a restricted PATH. Include the
+    # declarative Git runtime explicitly because Pi's Git package source needs
+    # it even when the user's profile or ambient shell PATH is unavailable.
+    PATH="/opt/homebrew/bin:${pkgs.nodejs_22}/bin:${pkgs.jq}/bin:${pkgs.git}/bin:$PATH"
     export PATH
     ${./agents/converge-pi-packages} \
       "/opt/homebrew/bin/pi" \

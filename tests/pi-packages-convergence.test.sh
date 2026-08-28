@@ -13,6 +13,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 bin_dir="$TMP/bin"
 runtime_bin="$TMP/restricted-bin"
+declared_git_bin="$TMP/declarative-git/bin"
 agent_dir="$TMP/agent"
 state="$TMP/fake-pi-state"
 calls="$TMP/calls"
@@ -20,7 +21,7 @@ repair_calls="$TMP/repair-calls"
 repair_sdk="$TMP/repair-sdk.mjs"
 integrity_contract="$TMP/pi-package-integrity.json"
 pi="$bin_dir/pi"
-mkdir -p "$bin_dir" "$runtime_bin" "$agent_dir" "$state"
+mkdir -p "$bin_dir" "$runtime_bin" "$declared_git_bin" "$agent_dir" "$state"
 
 cat > "$integrity_contract" <<'EOF'
 {
@@ -42,13 +43,21 @@ cat > "$integrity_contract" <<'EOF'
 }
 EOF
 
-# Mirror the activation PATH while intentionally masking bare awk. The helper
-# must use the stable macOS awk path and only the declared runtime tools.
+# Mirror the activation PATH while intentionally masking bare awk and bare Git.
+# The helper must use the stable macOS awk path and only the declared runtime
+# tools, with Git supplied by the explicit Nix path fixture below.
 for runtime_tool in cat jq mkdir node; do
   ln -s "$(command -v "$runtime_tool")" "$runtime_bin/$runtime_tool"
 done
 
-installed_pi=$(command -v pi)
+# Home Manager also provides a Pi launcher, but package-manager SDK discovery
+# must follow the Apple Silicon Homebrew Pi executable used by activation.
+installed_pi=/opt/homebrew/bin/pi
+[ -x "$installed_pi" ] || {
+  printf 'pi-packages-convergence.test.sh: Homebrew Pi executable is unavailable: %s\n' \
+    "$installed_pi" >&2
+  exit 1
+}
 installed_pi_real=$(/usr/bin/readlink -f "$installed_pi")
 installed_pi_prefix=${installed_pi_real%/bin/pi}
 pi_package_manager_sdk="$installed_pi_prefix/libexec/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
@@ -58,7 +67,7 @@ pi_package_manager_sdk="$installed_pi_prefix/libexec/lib/node_modules/@earendil-
   exit 1
 }
 
-cat > "$runtime_bin/git" <<'EOF'
+cat > "$declared_git_bin/git" <<'EOF'
 #!/bin/bash
 set -euo pipefail
 if [ "${1:-}" = '-C' ] && [ "${3:-}" = 'rev-parse' ] && [ "${4:-}" = 'HEAD' ]; then
@@ -71,7 +80,7 @@ if [ "${1:-}" = '-C' ] && [ "${3:-}" = 'status' ] && [ "${4:-}" = '--porcelain=v
 fi
 exit 97
 EOF
-chmod +x "$runtime_bin/git"
+chmod +x "$declared_git_bin/git"
 
 cat > "$pi" <<'EOF'
 #!/bin/bash
@@ -345,9 +354,11 @@ assert_source_present() {
   ' "$agent_dir/settings.json" >/dev/null || fail "missing configured source: $source_spec"
 }
 
-run_converger() {
+run_converger_with_path() {
+  path=$1
+  shift
   target_agent=${1:-$agent_dir}
-  PATH="$runtime_bin" CALLS="$calls" REPAIR_CALLS="$repair_calls" STATE="$state" \
+  PATH="$path" CALLS="$calls" REPAIR_CALLS="$repair_calls" STATE="$state" \
     PI_FIXTURE_EXECUTABLE="$pi" \
     PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
     PI_VERSION="${PI_VERSION:-0.84.3}" \
@@ -356,8 +367,34 @@ run_converger() {
       "$PACKAGE_NORMALIZER" "$repair_sdk"
 }
 
+run_converger() {
+  run_converger_with_path "$declared_git_bin:$runtime_bin" "$@"
+}
+
+# Verify the Home Manager activation boundary supplies Git from the locked Nix
+# package set instead of relying on the ambient profile PATH.
+# shellcheck disable=SC2016
+activation_text=$(cd "$SCRIPT_DIR" && nix eval --impure --raw \
+  '.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.activation.piPackages.data')
+# shellcheck disable=SC2016
+git_store=$(cd "$SCRIPT_DIR" && nix eval --impure --raw --expr \
+  'let flake = builtins.getFlake (toString ./.); in flake.inputs.nixpkgs.legacyPackages.${builtins.currentSystem}.git.outPath')
+grep -Fq "${git_store}/bin" <<<"$activation_text" \
+  || fail 'Pi activation PATH does not include the declarative Nix Git path'
+
 [ -x /usr/bin/awk ] || fail 'macOS system awk is unavailable for the activation contract'
 [ ! -e "$runtime_bin/awk" ] || fail 'restricted activation fixture unexpectedly exposes awk'
+[ ! -e "$runtime_bin/git" ] || fail 'restricted activation fixture unexpectedly exposes ambient Git'
+
+# Without the explicit declared Git path, the same restricted converger must
+# fail before package installation. The next fresh and repeat runs prove that
+# the declared path is sufficient.
+if run_converger_with_path "$runtime_bin" "$TMP/no-git-agent" \
+  >"$TMP/no-git.out" 2>&1; then
+  fail 'converger unexpectedly used Git outside the declared activation path'
+fi
+grep -Fq 'git is unavailable in the activation PATH' "$TMP/no-git.out" \
+  || fail 'missing declared Git path was not reported'
 
 expected_calls=$(cat <<'EOF'
 install npm:@llblab/pi-telegram@0.39.2
@@ -667,7 +704,7 @@ bad_state="$TMP/bad-pi-state"
 bad_calls="$TMP/bad-calls"
 bad_agent="$TMP/bad-agent"
 mkdir -p "$bad_state" "$bad_agent"
-if PATH="$runtime_bin" CALLS="$bad_calls" STATE="$bad_state" PI_VERSION='0.84.4' \
+if PATH="$declared_git_bin:$runtime_bin" CALLS="$bad_calls" STATE="$bad_state" PI_VERSION='0.84.4' \
   REPAIR_CALLS="$repair_calls" PI_FIXTURE_EXECUTABLE="$pi" \
   PI_PACKAGE_MANAGER_SDK="$pi_package_manager_sdk" \
   /bin/bash "$CONVERGER" "$pi" "$bad_agent" "$EFFECTIVE_STATE_CHECKER" \
