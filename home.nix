@@ -2,6 +2,7 @@
 let
   firstmateToolchain = import ./nix/firstmate-toolchain.nix { inherit pkgs; };
   piWithVim = import ./nix/pi-with-vim.nix { inherit pkgs; };
+  vscodeUserDirectory = "Library/Application Support/Code/User";
   firstmateConfigMaterializer = pkgs.stdenv.mkDerivation {
     pname = "firstmate-config-materializer";
     version = "1.0.0";
@@ -106,6 +107,29 @@ in {
 
     initContent = builtins.readFile ./zshrc;
   };
+
+  # VS Code is installed by the Homebrew cask; keep its user preferences in
+  # the same Home Manager-linked profile as the other declarative settings.
+  home.file."${vscodeUserDirectory}/settings.json".source = ./vscode/settings.json;
+  home.file."${vscodeUserDirectory}/keybindings.json".source = ./vscode/keybindings.json;
+
+  # The VS Code cask does not install extensions. Ensure every audited
+  # extension ID is present without updating or removing other extensions.
+  home.activation.vscodeExtensions = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+    code="/opt/homebrew/bin/code"
+    if [ ! -x "$code" ]; then
+      echo "Home Manager: VS Code CLI is unavailable; audited extensions were not installed" >&2
+      exit 1
+    fi
+
+    installed="$($code --list-extensions)"
+    while IFS= read -r extension; do
+      [ -n "$extension" ] || continue
+      if ! printf '%s\n' "$installed" | grep -Fqx "$extension"; then
+        "$code" --install-extension "$extension"
+      fi
+    done < ${./vscode/extensions.txt}
+  '';
 
   # Link AGENTS.md to AntiGravity CLI dir
   home.file.".gemini/antigravity-cli/agents.md".source = ./AGENTS.md;

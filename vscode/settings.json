@@ -1,0 +1,116 @@
+{
+  "workbench.colorTheme": "One Dark Pro",
+  "ruby.useBundler": true,
+  "ruby.intellisense": "rubyLocate",
+  "ruby.format": "rubocop",
+  "ruby.codeCompletion": "rcodetools",
+  "ruby.useLanguageServer": true,
+  "workbench.editor.scrollToSwitchTabs": true,
+  "C_Cpp.updateChannel": "Insiders",
+  "C_Cpp.default.intelliSenseMode": "clang-x86",
+  "editor.suggestSelection": "first",
+  "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "diffEditor.wordWrap": "off",
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "ruby.lint": {
+    "reek": true,
+    "rubocop": true,
+    "ruby": true, //Runs ruby -wc
+    "fasterer": true,
+    "debride": true,
+    "ruby-lint": true
+  },
+  "solargraph.externalServer": {
+    "host": "localhost",
+    "port": 7658
+  },
+  "[ruby]": {
+    "editor.defaultFormatter": "misogi.ruby-rubocop"
+  },
+  "explorer.compactFolders": false,
+  "files.exclude": {
+    "**/.classpath": true,
+    "**/.project": true,
+    "**/.settings": true,
+    "**/.factorypath": true
+  },
+  "javascript.preferences.quoteStyle": "single",
+  "typescript.preferences.quoteStyle": "single",
+  "workbench.editorAssociations": {
+    "*.ipynb": "jupyter-notebook"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "notebook.cellToolbarLocation": {
+    "default": "right",
+    "jupyter-notebook": "left"
+  },
+  "eslint.format.enable": true,
+  "editor.tabSize": 2,
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "terminal.integrated.fontFamily": "'SourceCodePro+PowerLine+AwesomeRegular'",
+  "editor.unicodeHighlight.invisibleCharacters": false,
+  "editor.unicodeHighlight.ambiguousCharacters": false,
+  "haskell.manageHLS": "GHCup",
+  "vim.insertModeKeyBindings": [
+    {
+      "before": ["j", "j"],
+      "after": ["<Esc>"]
+    }
+  ],
+  "vim.normalModeKeyBindingsNonRecursive": [
+    {
+      "before": ["<C-d>"],
+      "after": ["<C-d>", "z", "z"]
+    },
+    {
+      "before": ["<C-u>"],
+      "after": ["<C-u>", "z", "z"]
+    }
+  ],
+  "vim.useSystemClipboard": true,
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "workbench.startupEditor": "none",
+  "workbench.iconTheme": "material-icon-theme",
+  "errorLens.enabled": false,
+  "oneDarkPro.vivid": true,
+  "vim.cursorStylePerMode.insert": "line-thin",
+  "[astro]": {
+    "editor.defaultFormatter": "astro-build.astro-vscode"
+  },
+  "rust-analyzer.inlayHints.typeHints.enable": false,
+  "rust-analyzer.inlayHints.parameterHints.enable": false,
+  "rust-analyzer.inlayHints.chainingHints.enable": false,
+  "[python]": {
+    "editor.formatOnType": true
+  },
+  "editor.cursorSurroundingLines": 15,
+  "errorLens.enabledDiagnosticLevels": ["warning", "info"],
+  "rust-analyzer.inlayHints.closingBraceHints.enable": false,
+  "rust-analyzer.inlayHints.renderColons": false,
+  "window.zoomLevel": 1,
+  "liveServer.settings.donotShowInfoMsg": true,
+  "window.commandCenter": false,
+  "workbench.colorCustomizations": {
+    "editorCursor.foreground": "#d1329b",
+    "terminalCursor.foreground": "#d1329b"
+  },
+  "github.copilot.nextEditSuggestions.enabled": true,
+  "workbench.secondarySideBar.defaultVisibility": "hidden"
+}
