@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavioral contract for VS Code preference links and required extensions.
+# Behavioral contract for VS Code preference links and audited extensions.
 set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -18,11 +18,25 @@ assert_eq() {
 
 settings_source="$REPO_ROOT/vscode/settings.json"
 keybindings_source="$REPO_ROOT/vscode/keybindings.json"
+extensions_source="$REPO_ROOT/vscode/extensions.txt"
 settings_relative='Library/Application Support/Code/User/settings.json'
 keybindings_relative='Library/Application Support/Code/User/keybindings.json'
 
 [ -f "$settings_source" ] || fail 'tracked settings source is missing'
 [ -f "$keybindings_source" ] || fail 'tracked keybindings source is missing'
+[ -s "$extensions_source" ] || fail 'tracked extension inventory is missing'
+[ "$(grep -c '^[^[:space:]]' "$extensions_source")" -eq 71 ] \
+  || fail 'tracked extension inventory is incomplete'
+if ! LC_ALL=C sort -fu "$extensions_source" | cmp -s - "$extensions_source"; then
+  fail 'tracked extension inventory is not unique and sorted'
+fi
+for extension in \
+  pkief.material-icon-theme \
+  vscodevim.vim \
+  zhuangtongfa.material-theme; do
+  grep -Fqx "$extension" "$extensions_source" \
+    || fail "tracked extension inventory omitted $extension"
+done
 for setting in \
   '"workbench.colorTheme": "One Dark Pro"' \
   '"workbench.iconTheme": "material-icon-theme"' \
@@ -54,9 +68,9 @@ cmp -s "$settings_source" "$home_files/$settings_relative" \
 cmp -s "$keybindings_source" "$home_files/$keybindings_relative" \
   || fail 'generated keybindings differ from tracked keybindings'
 
-# Exercise Home Manager's real link helper in a disposable HOME. An identical
-# Pre-existing regular files are preserved in the configured backup before
-# the generation link is published, whether or not their content is identical.
+# Exercise Home Manager's real link helper in a disposable HOME. Pre-existing
+# regular files are preserved in the configured backup before the generation
+# link is published, whether or not their content is identical.
 link_script=$(nix eval --impure --raw \
   'path:.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.activation.linkGeneration.data' \
   | grep -oE '/nix/store/[^"[:space:]]+-link' | head -1)
@@ -125,17 +139,16 @@ cmp -s "$settings_source" "$changed_user_dir/settings.json" \
 assert_eq 'local settings change' "$(cat "$changed_user_dir/settings.json.backup")"
 
 # The extension activation is also run against a fake code CLI. The first run
-# installs only missing required IDs; the second run must be a no-op.
+# installs only missing audited IDs; the second run must be a no-op.
 activation=$(nix eval --impure --raw \
   'path:.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.activation.vscodeExtensions.data')
-for extension in pkief.material-icon-theme vscodevim.vim zhuangtongfa.material-theme; do
-  printf '%s\n' "$activation" | grep -Fq "$extension" \
-    || fail "required extension $extension is absent from activation"
-done
+printf '%s\n' "$activation" | grep -Fq 'extensions.txt' \
+  || fail 'extension activation does not consume the tracked inventory'
 
 state="$TMP/extensions"
 install_log="$TMP/extension-installs"
-printf '%s\n' vscodevim.vim > "$state"
+head -n 1 "$extensions_source" > "$state"
+sed -n '2,$p' "$extensions_source" > "$TMP/expected-installs"
 : > "$install_log"
 fake_code="$TMP/code"
 cat > "$fake_code" <<'EOF'
@@ -163,10 +176,14 @@ activation=${activation//\/opt\/homebrew\/bin\/code/$fake_code}
 activation_script="$TMP/activation.sh"
 printf '%s\n' "$activation" > "$activation_script"
 STATE="$state" INSTALL_LOG="$install_log" bash "$activation_script"
-assert_eq $'pkief.material-icon-theme\nzhuangtongfa.material-theme' "$(cat "$install_log")"
-expected_state=$'vscodevim.vim\npkief.material-icon-theme\nzhuangtongfa.material-theme'
-assert_eq "$expected_state" "$(cat "$state")"
+cmp -s "$extensions_source" "$state" \
+  || fail 'extension activation did not restore the complete audited inventory'
+cmp -s "$TMP/expected-installs" "$install_log" \
+  || fail 'extension activation installed an unexpected set of IDs'
 STATE="$state" INSTALL_LOG="$install_log" bash "$activation_script"
-assert_eq $'pkief.material-icon-theme\nzhuangtongfa.material-theme' "$(cat "$install_log")"
+cmp -s "$extensions_source" "$state" \
+  || fail 'repeated extension activation changed the inventory'
+cmp -s "$TMP/expected-installs" "$install_log" \
+  || fail 'repeated extension activation was not idempotent'
 
-printf 'ok - Home Manager VS Code links, safe migration, required extensions, and idempotence\n'
+printf 'ok - Home Manager VS Code links, safe migration, complete extension inventory, and idempotence\n'
