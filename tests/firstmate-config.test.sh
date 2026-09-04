@@ -86,7 +86,7 @@ assert_eq '7500' "$(cat "$fresh/config/startup-memory-budget")"
 [ "$(link_count "$fresh/config/startup-memory-budget")" = 1 ] || fail 'default startup memory budget has multiple hard links'
 jq -e '
   (.rules | length) == 4
-  and .rules[0].when == "architecture, ambiguous diagnosis, planning, security analysis, or a bounded review of already-produced output"
+  and .rules[0].when == "planning, architecture, diagnosis, design, security, or a bounded review of a plan or output"
   and .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "high"}
   and .rules[0].why == "Astra plans: scarce and strategic, at most one or two bounded high-reasoning passes on a ship."
   and .rules[1].when == "mechanical, fully specified edits"

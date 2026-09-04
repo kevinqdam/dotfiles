@@ -24,7 +24,7 @@ static const char crew_dispatch[] =
     "{\n"
     "  \"rules\": [\n"
     "    {\n"
-    "      \"when\": \"architecture, ambiguous diagnosis, planning, security analysis, or a bounded review of already-produced output\",\n"
+    "      \"when\": \"planning, architecture, diagnosis, design, security, or a bounded review of a plan or output\",\n"
     "      \"use\": {\n"
     "        \"harness\": \"pi\",\n"
     "        \"model\": \"gpt-6-astra\",\n"
