@@ -53,7 +53,7 @@ for package in "${@:4}"; do
   fi
 done
 
-expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code'
+expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code'
 if [ "$*" != "$expected" ]; then
   printf 'unexpected Homebrew command: %s\n' "$*" >&2
   exit 97
@@ -144,9 +144,9 @@ rm -f "$state/homebrew-upgrade" "$state/raycast-updated"
 if ! run_rebuild 1 --upgrade; then
   fail 'installer-manual Logi Tune prevented the Nix rebuild'
 fi
-expected_upgrade=$'upgrade-helper /opt/homebrew/bin/brew '"$(id -un)"$'\nbrew upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code\ngit add .\nnix build .#darwinConfigurations.macbook.system\nsudo ./result/sw/bin/darwin-rebuild switch --flake .#macbook\nsetup-harnesses'
+expected_upgrade=$'upgrade-helper /opt/homebrew/bin/brew '"$(id -un)"$'\nbrew upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code\ngit add .\nnix build .#darwinConfigurations.macbook.system\nsudo ./result/sw/bin/darwin-rebuild switch --flake .#macbook\nsetup-harnesses'
 assert_eq "$expected_upgrade" "$(cat "$log")"
-assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
+assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
 [ -e "$state/homebrew-upgrade" ] || fail 'upgrade mode did not complete Homebrew upgrades'
 [ -e "$state/raycast-updated" ] || fail 'upgrade mode did not upgrade Raycast'
 

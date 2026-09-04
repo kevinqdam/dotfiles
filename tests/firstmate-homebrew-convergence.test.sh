@@ -43,7 +43,7 @@ for package in "${@:4}"; do
     exit 1
   fi
 done
-expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code'
+expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code'
 if [ "$*" != "$expected" ]; then
   printf 'unexpected Homebrew command: %s\n' "$*" >&2
   exit 97
@@ -60,7 +60,7 @@ for package in "${@:4}"; do
     pi-coding-agent|herdr)
       : > "$STATE/formulas/$package"
       ;;
-    antigravity-cli|chatgpt|codex|google-drive|google-chrome|google-gemini|iterm2|raycast|superwhisper|tailscale-app|visual-studio-code)
+    antigravity-cli|chatgpt|codex|google-drive|google-chrome|google-gemini|grok-bot|iterm2|raycast|superwhisper|tailscale-app|visual-studio-code)
       # Model Homebrew downloading a cask payload and replacing its app bundle.
       : > "$STATE/downloaded/$package"
       : > "$STATE/replaced/$package"
@@ -84,8 +84,8 @@ rm -rf "$state"
 mkdir -p "$state"
 MODE=success CALLS="$calls" STATE="$state" \
   "$CONVERGER" "$brew" "$owner" >"$TMP/success.out" 2>"$TMP/success.err"
-assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
-for cask in antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code; do
+assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
+for cask in antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code; do
   [ -e "$state/downloaded/$cask" ] || fail "$cask download was not requested"
   [ -e "$state/replaced/$cask" ] || fail "$cask app replacement was not requested"
 done
@@ -108,7 +108,7 @@ if MODE=conflict CALLS="$calls" STATE="$state" \
   "$CONVERGER" "$brew" "$owner" >"$TMP/conflict.out" 2>"$TMP/conflict.err"; then
   fail 'Homebrew conflict was treated as success'
 fi
-assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini iterm2 raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
+assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
 grep -Fq 'already a Binary at /opt/homebrew/bin/agy' "$TMP/conflict.err" \
   || fail 'Homebrew conflict diagnostic was not surfaced'
 [ ! -e "$state/targeted-upgrade" ] || fail 'failed upgrade changed the fixture'
