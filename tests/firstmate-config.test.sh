@@ -85,10 +85,14 @@ assert_eq 'pi' "$(cat "$fresh/config/crew-harness")"
 assert_eq '7500' "$(cat "$fresh/config/startup-memory-budget")"
 [ "$(link_count "$fresh/config/startup-memory-budget")" = 1 ] || fail 'default startup memory budget has multiple hard links'
 jq -e '
-  (.rules | length) == 2
-  and .rules[0].use == {harness: "pi", model: "gpt-5.6-luna", effort: "max"}
-  and .rules[1].use == {harness: "pi", model: "gpt-5.6-sol", effort: "high"}
-  and .default == {harness: "pi", model: "gpt-5.6-sol", effort: "medium"}
+  (.rules | length) == 3
+  and .rules[0].when == "architecture, ambiguous diagnosis, planning, security analysis, explicit review, or poorly scoped exploratory work that needs high reasoning"
+  and .rules[0].use == {harness: "pi", model: "gpt-5.6-sol", effort: "high"}
+  and .rules[1].when == "mechanical, fully specified edits such as a known config line, cask add, or rote rename"
+  and .rules[1].use == {harness: "pi", model: "xai/grok-4.6", effort: "medium"}
+  and .rules[2].when == "routine, well-defined, or well-scoped implementation work"
+  and .rules[2].use == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
+  and .default == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
 ' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved semantic configuration'
 
 populated="$TMP/populated"
