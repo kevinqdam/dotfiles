@@ -87,19 +87,19 @@ assert_eq '7500' "$(cat "$fresh/config/startup-memory-budget")"
 jq -e '
   (.rules | length) == 4
   and .rules[0].when == "architecture, ambiguous diagnosis, planning, security analysis, or a bounded review of already-produced output"
-  and .rules[0].use == {harness: "pi", model: "gpt-5.6-sol", effort: "high"}
-  and .rules[0].why == "Sol is scarce and strategic: at most one or two bounded high-reasoning passes on a ship."
+  and .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "high"}
+  and .rules[0].why == "Astra plans: scarce and strategic, at most one or two bounded high-reasoning passes on a ship."
   and .rules[1].when == "mechanical, fully specified edits"
   and .rules[1].use == {harness: "pi", model: "xai/grok-4.6", effort: "medium"}
-  and .rules[1].why == "Mechanical, fully specified edits stay on Grok so scarce Sol is reserved for at most one or two bounded high-reasoning passes."
+  and .rules[1].why == "Grok executes mechanical, fully specified edits so scarce Astra is reserved for at most one or two bounded high-reasoning passes."
   and .rules[2].when == "well-scoped implementation"
   and .rules[2].use == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
-  and .rules[2].why == "Well-scoped implementation stays on Grok; Sol remains scarce and is not the default implementation model."
+  and .rules[2].why == "Grok executes well-scoped implementation; Astra remains scarce and is not the default implementation model."
   and .rules[3].when == "driving no-mistakes, validation, CI, or any long unattended pipeline"
   and .rules[3].use == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
-  and .rules[3].why == "Unattended overnight no-mistakes must run on Grok after any Sol pass, never as an automatic Sol cadence."
+  and .rules[3].why == "Never overnight Astra: unattended no-mistakes must run on Grok after any Astra pass, never as an automatic Astra cadence."
   and .default == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
-' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved scarce-Sol configuration'
+' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved scarce-Astra configuration'
 
 populated="$TMP/populated"
 mkdir -p "$populated/config" "$populated/data" "$populated/state" "$populated/projects"
