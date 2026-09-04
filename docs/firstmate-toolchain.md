@@ -78,9 +78,9 @@ Secondmate launchers pass explicit `FM_HOME` and `FM_ROOT_OVERRIDE` values, incl
 Home Manager builds the native materializer from `agents/materialize-firstmate-config.c` and invokes it with the canonical home.
 It creates only missing regular files for `config/backend`, `config/crew-harness`, `config/crew-dispatch.json`, and `config/startup-memory-budget`.
 The defaults select Herdr, Pi, the approved Pi model and effort routing, and a 7500-token startup memory budget.
-Sol is scarce and strategic: at most one or two bounded high-reasoning passes on a ship.
-Fresh homes route architecture, ambiguous diagnosis, planning, security analysis, or a bounded review of already-produced output to `gpt-5.6-sol` at effort `high`; mechanical fully specified edits to `xai/grok-4.6` at effort `medium`; and well-scoped implementation, driving no-mistakes, validation, CI, or any long unattended pipeline, plus the default, to `xai/grok-4.6` at effort `high`.
-Unattended overnight no-mistakes must run on Grok after that, never as an automatic Sol cadence.
+Astra plans: scarce and strategic, at most one or two bounded high-reasoning passes on a ship. Grok executes.
+Fresh homes route planning, architecture, diagnosis, design, security, or a bounded review of a plan or output to `gpt-6-astra` at effort `high`; mechanical fully specified edits to `xai/grok-4.6` at effort `medium`; and well-scoped implementation, driving no-mistakes, validation, CI, or any long unattended pipeline, plus the default, to `xai/grok-4.6` at effort `high`.
+Never overnight Astra: unattended no-mistakes must run on Grok after that, never as an automatic Astra cadence.
 The Firstmate dispatcher still gives explicit per-task captain `--harness`, `--model`, and `--effort` requests precedence over these defaults.
 
 A populated home is treated as captain-owned.
