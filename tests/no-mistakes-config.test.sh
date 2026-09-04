@@ -160,6 +160,24 @@ overrides_json=$(routing_json "$overrides/config.yaml")
 assert_eq '42h' "$(printf '%s\n' "$overrides_json" | jq -r .ci_timeout)"
 assert_eq '["--foo"]' "$(printf '%s\n' "$overrides_json" | jq -c .codex_args)"
 
+commented="$TMP/commented-override"
+mkdir -p "$commented"
+cat > "$commented/config.yaml" <<'EOF'
+agent: auto
+ci_timeout: "12h"
+agent_args_override: # flags
+  codex:
+    - --foo
+  pi: # grok
+    - --model
+    - gpt-4.1
+EOF
+python3 "$MATERIALIZER" "$commented" >/dev/null
+assert_approved_routing "$commented/config.yaml"
+commented_json=$(routing_json "$commented/config.yaml")
+assert_eq '12h' "$(printf '%s\n' "$commented_json" | jq -r .ci_timeout)"
+assert_eq '["--foo"]' "$(printf '%s\n' "$commented_json" | jq -c .codex_args)"
+
 already="$TMP/already"
 mkdir -p "$already"
 cp "$overrides/config.yaml" "$already/config.yaml"

@@ -145,7 +145,10 @@ def parse_key_line(line: str, indent: int) -> tuple[str, str | None] | None:
     match = KEY_RE.match(line[indent:])
     if match is None:
         return None
-    return match.group("key"), match.group("value")
+    value = match.group("value")
+    if value is not None and value.startswith("#"):
+        value = None
+    return match.group("key"), value
 
 
 def strip_inline_comment(value: str) -> str:
