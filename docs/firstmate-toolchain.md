@@ -78,7 +78,7 @@ Secondmate launchers pass explicit `FM_HOME` and `FM_ROOT_OVERRIDE` values, incl
 Home Manager builds the native materializer from `agents/materialize-firstmate-config.c` and invokes it with the canonical home.
 It creates only missing regular files for `config/backend`, `config/crew-harness`, `config/crew-dispatch.json`, and `config/startup-memory-budget`.
 The defaults select Herdr, Pi, the approved Pi model and effort routing, and a 7500-token startup memory budget.
-Fresh homes route architecture, ambiguous diagnosis, planning, security analysis, explicit review, and poorly scoped exploratory work to `gpt-5.6-sol` at effort `high`; mechanical fully specified edits to `xai/grok-4.6` at effort `medium`; and routine well-scoped implementation, plus the default, to `xai/grok-4.6` at effort `high`.
+Fresh homes route architecture, ambiguous diagnosis, planning, security analysis, explicit review, or poorly scoped exploratory work that needs high reasoning to `gpt-5.6-sol` at effort `high`; mechanical fully specified edits to `xai/grok-4.6` at effort `medium`; and routine, well-defined, or well-scoped implementation, plus the default, to `xai/grok-4.6` at effort `high`.
 The Firstmate dispatcher still gives explicit per-task captain `--harness`, `--model`, and `--effort` requests precedence over these defaults.
 
 A populated home is treated as captain-owned.
