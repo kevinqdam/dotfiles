@@ -63,6 +63,7 @@
       "google-drive"
       "google-chrome"
       "google-gemini"
+      "grok-bot"
       "iterm2"
       "logitune"
       "raycast"

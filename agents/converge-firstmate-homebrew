@@ -46,6 +46,7 @@ targeted_upgrades=(
   google-drive
   google-chrome
   google-gemini
+  grok-bot
   iterm2
   raycast
   superwhisper
