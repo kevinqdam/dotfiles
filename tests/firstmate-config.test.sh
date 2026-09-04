@@ -85,15 +85,21 @@ assert_eq 'pi' "$(cat "$fresh/config/crew-harness")"
 assert_eq '7500' "$(cat "$fresh/config/startup-memory-budget")"
 [ "$(link_count "$fresh/config/startup-memory-budget")" = 1 ] || fail 'default startup memory budget has multiple hard links'
 jq -e '
-  (.rules | length) == 3
-  and .rules[0].when == "architecture, ambiguous diagnosis, planning, security analysis, explicit review, or poorly scoped exploratory work that needs high reasoning"
+  (.rules | length) == 4
+  and .rules[0].when == "architecture, ambiguous diagnosis, planning, security analysis, or a bounded review of already-produced output"
   and .rules[0].use == {harness: "pi", model: "gpt-5.6-sol", effort: "high"}
-  and .rules[1].when == "mechanical, fully specified edits such as a known config line, cask add, or rote rename"
+  and .rules[0].why == "Sol is scarce and strategic: at most one or two bounded high-reasoning passes on a ship."
+  and .rules[1].when == "mechanical, fully specified edits"
   and .rules[1].use == {harness: "pi", model: "xai/grok-4.6", effort: "medium"}
-  and .rules[2].when == "routine, well-defined, or well-scoped implementation work"
+  and .rules[1].why == "Mechanical, fully specified edits stay on Grok so scarce Sol is reserved for at most one or two bounded high-reasoning passes."
+  and .rules[2].when == "well-scoped implementation"
   and .rules[2].use == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
+  and .rules[2].why == "Well-scoped implementation stays on Grok; Sol remains scarce and is not the default implementation model."
+  and .rules[3].when == "driving no-mistakes, validation, CI, or any long unattended pipeline"
+  and .rules[3].use == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
+  and .rules[3].why == "Unattended overnight no-mistakes must run on Grok after any Sol pass, never as an automatic Sol cadence."
   and .default == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
-' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved semantic configuration'
+' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved scarce-Sol configuration'
 
 populated="$TMP/populated"
 mkdir -p "$populated/config" "$populated/data" "$populated/state" "$populated/projects"
