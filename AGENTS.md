@@ -33,6 +33,10 @@ This system is fully declarative and managed by **Nix, Nix-Darwin, Nix-Homebrew,
   ```
 - **Do not** run `sudo ./rebuild.sh`. The script runs `nix build` as the user and escalates to `sudo` internally only when activating the system.
 
+### 4. no-mistakes pipeline agent
+Do not Home Manager-link `~/.no-mistakes/config.yaml`; rebuilds patch Pi + Grok routing through `agents/materialize-no-mistakes-config.py`.
+Firstmate owns the Astra review slot. See `docs/firstmate-toolchain.md`.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

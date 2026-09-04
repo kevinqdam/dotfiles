@@ -90,6 +90,28 @@ Missing settings are published atomically without replacing a target that appear
 Canonical home and config directories are opened component by component without following symlinks, and all inspection, validation, temporary-file, and publication operations use their held directory descriptors.
 Runtime state, task records, captain memory, backlog, data, project clones, credentials, authentication files, and generated monitoring artifacts are never touched by the activation hook.
 
+## no-mistakes pipeline agent
+
+Home Manager does not symlink `~/.no-mistakes/config.yaml`. Replacing that live file with a generation link would smash daemon state.
+
+Activation runs `agents/materialize-no-mistakes-config.py` against `~/.no-mistakes`.
+It converges two routing keys so rebuilds match Firstmate execution:
+
+- `agent: pi`
+- `agent_args_override.pi`: `--model xai/grok-4.6 --thinking high`
+
+Those keys are the no-mistakes pipeline agent for test, lint, push, and PR.
+They are not `auto`, which would hire Codex because Codex is installed.
+Grok Bot.app is not this agent, and the grok CLI is not installed; Pi already provides the Grok model.
+
+Missing keys receive the approved values.
+Unrelated captain-owned keys such as `ci_timeout` and `auto_fix` stay.
+A symlink, directory, or other non-regular `config.yaml` fails closed instead of replacing live daemon state.
+
+High-reasoning review is a separate Firstmate pass on `gpt-6-astra`, at most once.
+Firstmate owns that Astra review slot because no-mistakes has no per-step agent today; running review inside no-mistakes would use Pi+Grok or, with `agent: auto`, Codex.
+After Astra has reviewed, or the captain skips that pass, Grok drives no-mistakes with `--skip=review` when needed so the no-mistakes review step does not launch Codex.
+
 ## Firstmate checkout remotes
 
 `agents/setup-harnesses` uses `git@github.com:kevinqdam/firstmate-local.git` as `origin` and `https://github.com/kunchenguid/firstmate.git` as the fetch-only `upstream`.
