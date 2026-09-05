@@ -142,6 +142,13 @@ in {
       "${config.home.homeDirectory}/.local/share/firstmate"
   '';
 
+  # Do not Home Manager-link ~/.no-mistakes/config.yaml: that would smash live
+  # daemon state. Patch only the pipeline-agent routing keys on rebuild.
+  home.activation.noMistakesConfig = lib.hm.dag.entryAfter [ "firstmateConfig" ] ''
+    ${pkgs.python3}/bin/python3 ${./agents/materialize-no-mistakes-config.py} \
+      "${config.home.homeDirectory}/.no-mistakes"
+  '';
+
   # Homebrew installs Pi before Home Manager activation. Let Pi own its
   # ordinary-writable package settings and storage; do not link connector,
   # provider, or runtime configuration into the declarative profile.
