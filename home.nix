@@ -170,6 +170,9 @@ in {
 
   # Global Pi integration. It is inert until /firstmate is invoked.
   home.file.".pi/agent/extensions/firstmate-bootstrap.ts".source = ./agents/pi/extensions/firstmate-bootstrap.ts;
+  # Drop tool_choice from Pi summarization requests that send no tools so xAI
+  # does not 400. Distinct from OpenAI server-side compaction.
+  home.file.".pi/agent/extensions/omit-empty-tool-choice.ts".source = ./agents/pi/extensions/omit-empty-tool-choice.ts;
   home.file.".local/bin/setup-harnesses".source = ./agents/setup-harnesses;
 
   home.stateVersion = "24.05";

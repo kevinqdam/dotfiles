@@ -37,6 +37,10 @@ This system is fully declarative and managed by **Nix, Nix-Darwin, Nix-Homebrew,
 Do not Home Manager-link `~/.no-mistakes/config.yaml`; rebuilds patch Pi + Grok routing through `agents/materialize-no-mistakes-config.py`.
 Firstmate owns the Astra review slot. See `docs/firstmate-toolchain.md`.
 
+### 5. Pi extensions
+Source Pi extensions in `agents/pi/extensions/` and link them from `home.nix`.
+Grok empty-`tool_choice` 400s come from Pi summarization, not compaction; see `docs/pi-capabilities.md`. Do not disable `pi-openai-server-compaction`.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

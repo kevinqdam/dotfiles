@@ -37,6 +37,24 @@ implementation and Pi extension API compatibility passed that audit. The
 converger refuses the reviewed set when the installed Pi version is not 0.84.3
 instead of silently accepting a new compatibility combination.
 
+## Pi summarization and xAI `tool_choice`
+
+Pi native summarization can send `tool_choice` (including `"none"`) when the
+request has no tools. xAI rejects that combination with HTTP 400: "A
+tool_choice was set on the request but no tools were specified."
+
+Home Manager links `agents/pi/extensions/omit-empty-tool-choice.ts` into
+`~/.pi/agent/extensions/`. The `before_provider_request` hook deletes
+`tool_choice` unless the payload already has a non-empty `tools` array.
+
+This is a Pi summarization / xAI request-shape fix. It is distinct from OpenAI
+server-side compaction
+(`git:github.com/algal/pi-openai-server-compaction@c6d593087709e9481223dc6c6c2269b371b5e055`).
+That package already skips Grok and remains the compaction path for supported
+OpenAI and Codex models. Do not disable compaction, set
+`PI_OPENAI_SERVER_COMPACTION_ENABLED=0`, or write
+`~/.pi/agent/openai-server-compaction.json` for this 400.
+
 ## Post-activation setup
 
 1. Rebuild the system, then start Pi through Home Manager's managed `pi`
@@ -61,3 +79,6 @@ instead of silently accepting a new compatibility combination.
 5. Telegram setup is unchanged: run `/telegram-setup`, then
    `/telegram-connect`, then pair the bot with `/start`. Keep the bot token and
    all pairing and message state local.
+6. The omit-empty-tool-choice extension is active after rebuild. It needs no
+   extra key or local config. Do not treat a Grok 400 about empty `tool_choice`
+   as a compaction failure.
