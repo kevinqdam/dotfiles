@@ -168,6 +168,9 @@ in {
       "${./agents/pi-normalize-package.mjs}"
   '';
 
+  # Global Pi context for Firstmate coordinator discuss-plan-work policy.
+  # Ordinary coding sessions, crewmates, and no-mistakes step agents ignore it.
+  home.file.".pi/agent/AGENTS.md".source = ./agents/pi/AGENTS.md;
   # Global Pi integration. It is inert until /firstmate is invoked.
   home.file.".pi/agent/extensions/firstmate-bootstrap.ts".source = ./agents/pi/extensions/firstmate-bootstrap.ts;
   # Drop tool_choice from Pi summarization requests that send no tools so xAI

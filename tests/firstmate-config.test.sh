@@ -86,9 +86,9 @@ assert_eq '7500' "$(cat "$fresh/config/startup-memory-budget")"
 [ "$(link_count "$fresh/config/startup-memory-budget")" = 1 ] || fail 'default startup memory budget has multiple hard links'
 jq -e '
   (.rules | length) == 4
-  and .rules[0].when == "planning, architecture, diagnosis, design, security, or a bounded review of a plan or output"
+  and .rules[0].when == "planning, architecture, diagnosis, design, security, or a bounded review of a plan or already-produced output"
   and .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "high"}
-  and .rules[0].why == "Astra plans: scarce and strategic, at most one or two bounded high-reasoning passes on a ship."
+  and .rules[0].why == "Astra owns the plan artifact and one bounded finished-output review. Astra does not interview, implement, run tests, or watch CI. Do not omit that review to save quota."
   and .rules[1].when == "mechanical, fully specified edits"
   and .rules[1].use == {harness: "pi", model: "xai/grok-4.6", effort: "medium"}
   and .rules[1].why == "Grok executes mechanical, fully specified edits so scarce Astra is reserved for at most one or two bounded high-reasoning passes."
@@ -113,6 +113,20 @@ assert_eq '9100' "$(cat "$populated/config/startup-memory-budget")"
 assert_eq 'captain runtime' "$(cat "$populated/data/captain.md")"
 assert_eq 'runtime state' "$(cat "$populated/state/sentinel")"
 assert_eq 'herdr' "$(cat "$populated/config/backend")"
+
+custom_dispatch="$TMP/custom-dispatch"
+mkdir -p "$custom_dispatch/config" "$custom_dispatch/data"
+printf 'captain-owned-dispatch-bytes\n' > "$custom_dispatch/config/crew-dispatch.json"
+printf 'captain runtime\n' > "$custom_dispatch/data/captain.md"
+cp "$custom_dispatch/config/crew-dispatch.json" "$TMP/custom-dispatch.expected"
+cp "$custom_dispatch/data/captain.md" "$TMP/custom-captain.expected"
+"$MATERIALIZER" "$custom_dispatch" >/dev/null
+cmp -s "$TMP/custom-dispatch.expected" "$custom_dispatch/config/crew-dispatch.json" \
+  || fail 'existing custom dispatch was rewritten'
+cmp -s "$TMP/custom-captain.expected" "$custom_dispatch/data/captain.md" \
+  || fail 'existing captain memory was rewritten'
+assert_eq 'herdr' "$(cat "$custom_dispatch/config/backend")"
+assert_eq 'pi' "$(cat "$custom_dispatch/config/crew-harness")"
 
 conflict="$TMP/conflict"
 mkdir -p "$conflict/config"

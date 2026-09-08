@@ -78,8 +78,9 @@ Secondmate launchers pass explicit `FM_HOME` and `FM_ROOT_OVERRIDE` values, incl
 Home Manager builds the native materializer from `agents/materialize-firstmate-config.c` and invokes it with the canonical home.
 It creates only missing regular files for `config/backend`, `config/crew-harness`, `config/crew-dispatch.json`, and `config/startup-memory-budget`.
 The defaults select Herdr, Pi, the approved Pi model and effort routing, and a 7500-token startup memory budget.
-Astra plans: scarce and strategic, at most one or two bounded high-reasoning passes on a ship. Grok executes.
-Fresh homes route planning, architecture, diagnosis, design, security, or a bounded review of a plan or output to `gpt-6-astra` at effort `high`; mechanical fully specified edits to `xai/grok-4.6` at effort `medium`; and well-scoped implementation, driving no-mistakes, validation, CI, or any long unattended pipeline, plus the default, to `xai/grok-4.6` at effort `high`.
+Astra owns two scarce high-reasoning slots on a ship: the written plan artifact, then one bounded review of finished output. Grok executes everything else.
+Fresh homes route planning, architecture, diagnosis, design, security, or a bounded review of a plan or already-produced output to `gpt-6-astra` at effort `high`; mechanical fully specified edits to `xai/grok-4.6` at effort `medium`; and well-scoped implementation, driving no-mistakes, validation, CI, or any long unattended pipeline, plus the default, to `xai/grok-4.6` at effort `high`.
+Those Astra slots are distinct. Astra does not interview, implement, run tests, or watch CI. Do not omit the output-review slot to save quota.
 Never overnight Astra: unattended no-mistakes must run on Grok after that, never as an automatic Astra cadence.
 The Firstmate dispatcher still gives explicit per-task captain `--harness`, `--model`, and `--effort` requests precedence over these defaults.
 
@@ -108,9 +109,34 @@ Missing keys receive the approved values.
 Unrelated captain-owned keys such as `ci_timeout` and `auto_fix` stay.
 A symlink, directory, or other non-regular `config.yaml` fails closed instead of replacing live daemon state.
 
-High-reasoning review is a separate Firstmate pass on `gpt-6-astra`, at most once.
-Firstmate owns that Astra review slot because no-mistakes has no per-step agent today; running review inside no-mistakes would use Pi+Grok or, with `agent: auto`, Codex.
-After Astra has reviewed, or the captain skips that pass, Grok drives no-mistakes with `--skip=review` when needed so the no-mistakes review step does not launch Codex.
+The Astra plan slot and the required single finished-output review slot are distinct Firstmate passes on `gpt-6-astra` at high, at most those two bounded looks.
+Firstmate owns both slots because no-mistakes has no per-step agent today; running review inside no-mistakes would use Pi+Grok or, with `agent: auto`, Codex.
+Never omit the finished-output review to save quota. After that look, Grok drives no-mistakes with `--skip=review` so the no-mistakes review step does not launch Codex; do not skip validation. Keep the no-mistakes agent Pi+Grok. Quota conservation is not a skip.
+
+## Firstmate coordinator policy
+
+The instruction owner is `agents/pi/AGENTS.md`, linked by Home Manager to `~/.pi/agent/AGENTS.md`.
+Pi loads that global file automatically at startup and reload, including direct Firstmate launches and `/firstmate` activation.
+The bootstrap extension injects Firstmate checkout `AGENTS.md` only when `FM_FIRSTMATE_ACTIVE=1`, so docs or dispatch wording alone cannot deliver this policy.
+
+The policy applies only to Firstmate coordinator sessions. Ordinary coding sessions, dispatched crewmates and scouts, and no-mistakes step agents ignore it. Workers execute their assigned phase and must not start another cycle.
+
+`gsd-discuss`, `gsd-plan`, and `gsd-work` are stage names in that file, not shell commands.
+
+Activation still creates only missing regular Firstmate config files. It does not link, seed, or overwrite `data/captain.md`.
+
+### Existing-home steps
+
+Rebuild preserves existing `~/.local/share/firstmate/config/crew-dispatch.json` byte-for-byte.
+Inspect-then-update only the Astra role wording there so it matches the seed: Astra owns the plan artifact and one bounded finished-output review; Astra does not interview, implement, run tests, or watch CI; do not omit that review to save quota.
+Preserve unrelated captain choices and the existing model/effort values. Never delete the file to force reseeding.
+
+Separately inspect-then-update `data/captain.md` so the cycle records the accepted prior-authorization exception and points at `agents/pi/AGENTS.md`. Do not commit that private memory, and do not overwrite it through activation.
+
+After this change is in the canonical `~/.dotfiles` checkout, run `cd ~/.dotfiles && ./rebuild.sh`, then reload Pi context or start a fresh session. Do not restart the no-mistakes daemon.
+Verify cold-start delivery with captain memory absent and with stale memory present: the policy supersedes older standing workflow wording while preserving current captain instructions and task scope.
+
+`--no-context-files`, `AGENTS.override.md`, and custom Pi agent directories are unsupported delivery surfaces until explicitly covered.
 
 ## Firstmate checkout remotes
 
