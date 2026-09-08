@@ -39,6 +39,7 @@ Firstmate owns the Astra review slot. See `docs/firstmate-toolchain.md`.
 
 ### 5. Pi extensions
 Source Pi extensions in `agents/pi/extensions/` and link them from `home.nix`.
+Pi global agent instructions are `agents/pi/AGENTS.md`, linked to `~/.pi/agent/AGENTS.md`.
 Grok empty-`tool_choice` 400s come from Pi summarization, not compaction; see `docs/pi-capabilities.md`. Do not disable `pi-openai-server-compaction`.
 
 ## Maintaining this file
