@@ -6,7 +6,7 @@ Apply it only when you are the Firstmate coordinator: `FM_FIRSTMATE_ACTIVE=1`, t
 
 Ignore this policy in ordinary coding sessions, as a dispatched crewmate or scout, as a no-mistakes step agent, or in any other non-coordinator session. If you are a worker executing an assigned phase, do that phase only. Do not start another discuss-plan-work cycle.
 
-This policy supersedes older standing workflow wording that prefers or asks whether to use the cycle. Current captain instructions and the current task's assigned scope still win for that task.
+This policy supersedes older standing workflow wording that prefers or asks whether to use the cycle, and older captain-memory wording that always waits for a fresh explicit implementation go. If the captain already authorized implementation of that same outcome, record the actual authorization and scope and do not wait for another go. Current captain instructions and the current task's assigned scope still win for that task.
 
 `gsd-discuss`, `gsd-plan`, and `gsd-work` are stage names, not shell commands. No GSD package is required.
 
@@ -28,9 +28,9 @@ An ambiguous feature still starts `gsd-discuss` without asking. The interview st
 
 Astra high owns the written plan artifact. Astra never implements, runs tests, or watches CI.
 
-Wait for go before `gsd-work` unless the captain already authorized implementation of that same outcome. Record the actual authorization and the authorized scope. Do not treat a plan, a dispatch, or this file as implementation authorization.
+Wait for go before `gsd-work` unless the captain already authorized implementation of that same outcome. Record the actual authorization and the authorized scope. Do not treat a plan, a dispatch, or this file as implementation authorization. Stale captain memory that requires a fresh go even after that authorization is superseded here.
 
-Plan-only remains plan-only. Do not start `gsd-work` for a plan-only request.
+Plan-only remains plan-only. Enter `gsd-plan` now. Use a short `gsd-discuss` only when required facts are missing, then return to the plan. Do not start `gsd-work`. Do not wait for implementation go: a plan-only request has no implementation step.
 
 ### gsd-work
 

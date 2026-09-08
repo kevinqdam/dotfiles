@@ -2,11 +2,13 @@
 # Behavioral contract for Firstmate coordinator policy delivery through Pi
 # context loading. Asserts emitted instructions, not source grep of the
 # policy file as the sole proof. Instruction presence is not model obedience.
+# Development-only live model checks live in firstmate-policy-model-checks.sh.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 POLICY="$SCRIPT_DIR/agents/pi/AGENTS.md"
 HOME_NIX="$SCRIPT_DIR/home.nix"
+FIXTURES="$SCRIPT_DIR/tests/fixtures/firstmate-policy"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/firstmate-policy-test.XXXXXX")
 TMP=$(cd "$TMP" && pwd -P)
 trap 'rm -rf "$TMP"' EXIT
@@ -21,6 +23,9 @@ grep -Fqx '  home.file.".pi/agent/AGENTS.md".source = ./agents/pi/AGENTS.md;' \
 grep -Fqx '  home.file.".gemini/antigravity-cli/agents.md".source = ./AGENTS.md;' \
   "$HOME_NIX" || fail 'home.nix no longer links the project AGENTS.md for Agy'
 [ -f "$POLICY" ] || fail 'agents/pi/AGENTS.md is missing'
+[ -f "$FIXTURES/absent/AGENTS.md" ] || fail 'absent-captain fixture is missing'
+[ -f "$FIXTURES/stale/AGENTS.md" ] || fail 'stale-captain fixture is missing'
+[ -f "$FIXTURES/worker/AGENTS.md" ] || fail 'worker fixture is missing'
 
 PI_HOMEBREW=/opt/homebrew/bin/pi
 [ -x "$PI_HOMEBREW" ] || fail "Homebrew Pi executable is unavailable: $PI_HOMEBREW"
@@ -41,28 +46,28 @@ PY
 [ -f "$PI_PKG/dist/core/system-prompt.js" ] || fail "Pi prompt builder is unavailable"
 
 agent_dir="$TMP/agent"
-project="$TMP/firstmate"
-mkdir -p "$agent_dir" "$project"
+absent_project="$TMP/absent"
+stale_project="$TMP/stale"
+worker_project="$TMP/worker"
+mkdir -p "$agent_dir" "$absent_project" "$stale_project" "$worker_project"
 cp "$POLICY" "$agent_dir/AGENTS.md"
-cat > "$project/AGENTS.md" <<'EOF'
-# Firstmate
+cp "$FIXTURES/absent/AGENTS.md" "$absent_project/AGENTS.md"
+cp "$FIXTURES/stale/AGENTS.md" "$stale_project/AGENTS.md"
+cp "$FIXTURES/worker/AGENTS.md" "$worker_project/AGENTS.md"
 
-FIRSTMATE_PROJECT_CONTEXT_MARKER
-
-You are the first mate.
-EOF
-
-node --input-type=module - "$PI_PKG" "$agent_dir" "$project" "$POLICY" <<'EOF'
+node --input-type=module - "$PI_PKG" "$agent_dir" "$absent_project" "$stale_project" "$worker_project" "$POLICY" "$TMP" <<'EOF'
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const piPkg = process.argv[2];
 const agentDir = resolve(process.argv[3]);
-const projectDir = resolve(process.argv[4]);
-const policyPath = resolve(process.argv[5]);
+const absentDir = resolve(process.argv[4]);
+const staleDir = resolve(process.argv[5]);
+const workerDir = resolve(process.argv[6]);
+const policyPath = resolve(process.argv[7]);
+const tmpDir = resolve(process.argv[8]);
 const policy = readFileSync(policyPath, "utf8");
 
 const { loadProjectContextFiles, DefaultResourceLoader } = await import(
@@ -72,34 +77,32 @@ const { buildSystemPrompt } = await import(
   pathToFileURL(join(piPkg, "dist/core/system-prompt.js")).href
 );
 
-const contextFiles = loadProjectContextFiles({
-  cwd: projectDir,
-  agentDir,
-});
-assert.equal(contextFiles.length, 2, "expected global policy plus Firstmate project context");
-assert.equal(contextFiles[0].path, join(agentDir, "AGENTS.md"));
-assert.equal(contextFiles[0].content, policy);
-assert.equal(contextFiles[1].path, join(projectDir, "AGENTS.md"));
-assert.match(contextFiles[1].content, /FIRSTMATE_PROJECT_CONTEXT_MARKER/);
+function emit(cwd, files) {
+  return buildSystemPrompt({
+    cwd,
+    contextFiles: files,
+    selectedTools: ["read", "bash", "edit", "write"],
+    toolSnippets: {
+      read: "Read file contents",
+      bash: "Execute bash commands",
+      edit: "Edit files",
+      write: "Write files",
+    },
+  });
+}
 
-const prompt = buildSystemPrompt({
-  cwd: projectDir,
-  contextFiles,
-  selectedTools: ["read", "bash", "edit", "write"],
-  toolSnippets: {
-    read: "Read file contents",
-    bash: "Execute bash commands",
-    edit: "Edit files",
-    write: "Write files",
-  },
-});
+const absentFiles = loadProjectContextFiles({ cwd: absentDir, agentDir });
+assert.equal(absentFiles.length, 2, "expected global policy plus absent-memory Firstmate context");
+assert.equal(absentFiles[0].path, join(agentDir, "AGENTS.md"));
+assert.equal(absentFiles[0].content, policy);
+assert.equal(absentFiles[1].path, join(absentDir, "AGENTS.md"));
+assert.match(absentFiles[1].content, /ABSENT_CAPTAIN_MEMORY_MARKER/);
+assert.match(absentFiles[1].content, /captain\.md: ABSENT/);
 
-assert.match(prompt, /<project_context>/);
-assert.match(
-  prompt,
-  new RegExp(`<project_instructions path="${contextFiles[0].path.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}">`),
-);
-assert.match(prompt, /FIRSTMATE_PROJECT_CONTEXT_MARKER/);
+const absentPrompt = emit(absentDir, absentFiles);
+assert.match(absentPrompt, /<project_context>/);
+assert.match(absentPrompt, /ABSENT_CAPTAIN_MEMORY_MARKER/);
+assert.match(absentPrompt, /FIRSTMATE_PROJECT_CONTEXT_MARKER/);
 
 const required = [
   "Firstmate coordinator",
@@ -118,6 +121,8 @@ const required = [
   "Wait for go before `gsd-work` unless the captain already authorized implementation of that same outcome",
   "Record the actual authorization",
   "Plan-only remains plan-only",
+  "Enter `gsd-plan` now",
+  "Do not wait for implementation go: a plan-only request has no implementation step",
   "Grok implements, tests, lints, and drives no-mistakes/CI",
   "one bounded Astra-high review of finished output",
   "Never omit that look to save quota",
@@ -129,32 +134,61 @@ const required = [
   "stage names, not shell commands",
   "--no-context-files",
   "AGENTS.override.md",
+  "older captain-memory wording that always waits for a fresh explicit implementation go",
+  "do not wait for another go",
+  "Stale captain memory that requires a fresh go even after that authorization is superseded here",
 ];
 for (const needle of required) {
-  assert.ok(prompt.includes(needle), `emitted prompt missing: ${needle}`);
+  assert.ok(absentPrompt.includes(needle), `emitted prompt missing: ${needle}`);
 }
 
-// Four coordinator cases: instruction presence only. These do not prove
-// that a model will obey the policy.
 assert.ok(
-  prompt.includes("An ambiguous feature still starts `gsd-discuss` without asking"),
+  absentPrompt.includes("An ambiguous feature still starts `gsd-discuss` without asking"),
   "ambiguous-feature instructions missing from emitted prompt",
 );
 assert.ok(
-  prompt.includes("unless the captain already authorized implementation of that same outcome"),
+  absentPrompt.includes("unless the captain already authorized implementation of that same outcome"),
   "already-authorized instructions missing from emitted prompt",
 );
 assert.ok(
-  prompt.includes("Plan-only remains plan-only"),
+  absentPrompt.includes("Plan-only remains plan-only"),
   "plan-only instructions missing from emitted prompt",
 );
 assert.ok(
-  prompt.includes("Do not start another discuss-plan-work cycle"),
+  absentPrompt.includes("Do not start another discuss-plan-work cycle"),
   "nonrecursive-worker instructions missing from emitted prompt",
 );
 
+const staleFiles = loadProjectContextFiles({ cwd: staleDir, agentDir });
+assert.equal(staleFiles.length, 2, "expected global policy plus stale-memory Firstmate context");
+assert.equal(staleFiles[0].content, policy);
+assert.match(staleFiles[1].content, /STALE_CAPTAIN_MEMORY_MARKER/);
+assert.match(staleFiles[1].content, /wait for explicit implementation authorization/);
+const stalePrompt = emit(staleDir, staleFiles);
+assert.match(stalePrompt, /STALE_CAPTAIN_MEMORY_MARKER/);
+assert.match(stalePrompt, /wait for explicit implementation authorization/);
+assert.ok(
+  stalePrompt.includes("older captain-memory wording that always waits for a fresh explicit implementation go"),
+  "stale-memory prompt missing supersession of unconditional fresh-go wording",
+);
+assert.ok(
+  stalePrompt.includes("Stale captain memory that requires a fresh go even after that authorization is superseded here"),
+  "stale-memory prompt missing plan-stage fresh-go supersession",
+);
+assert.ok(
+  stalePrompt.includes("Current captain instructions and the current task's assigned scope still win for that task"),
+  "stale-memory prompt dropped current captain-instruction precedence",
+);
+
+const workerFiles = loadProjectContextFiles({ cwd: workerDir, agentDir });
+assert.equal(workerFiles.length, 2, "expected global policy plus worker project context");
+const workerPrompt = emit(workerDir, workerFiles);
+assert.match(workerPrompt, /FIRSTMATE_WORKER_CONTEXT_MARKER/);
+assert.ok(workerPrompt.includes("Do not start another discuss-plan-work cycle"));
+assert.ok(workerPrompt.includes("execute the assigned phase only"));
+
 const disabledLoader = new DefaultResourceLoader({
-  cwd: projectDir,
+  cwd: absentDir,
   agentDir,
   noExtensions: true,
   noSkills: true,
@@ -166,7 +200,7 @@ await disabledLoader.reload();
 assert.deepEqual(disabledLoader.getAgentsFiles().agentsFiles, []);
 
 const enabledLoader = new DefaultResourceLoader({
-  cwd: projectDir,
+  cwd: staleDir,
   agentDir,
   noExtensions: true,
   noSkills: true,
@@ -177,50 +211,44 @@ await enabledLoader.reload();
 const loaded = enabledLoader.getAgentsFiles().agentsFiles;
 assert.equal(loaded.length, 2);
 assert.equal(loaded[0].content, policy);
-assert.match(loaded[1].content, /FIRSTMATE_PROJECT_CONTEXT_MARKER/);
+assert.match(loaded[1].content, /STALE_CAPTAIN_MEMORY_MARKER/);
 const loaderPrompt = buildSystemPrompt({
-  cwd: projectDir,
+  cwd: staleDir,
   contextFiles: loaded,
 });
 assert.ok(loaderPrompt.includes("Never omit that look to save quota"));
-assert.ok(loaderPrompt.includes("FIRSTMATE_PROJECT_CONTEXT_MARKER"));
+assert.ok(loaderPrompt.includes("STALE_CAPTAIN_MEMORY_MARKER"));
 
-const overrideDir = mkdtempSync(join(tmpdir(), "firstmate-policy-override-"));
+const overrideDir = join(tmpDir, "override-agent");
+mkdirSync(overrideDir, { recursive: true });
 writeFileSync(join(overrideDir, "AGENTS.md"), policy);
 writeFileSync(
   join(overrideDir, "AGENTS.override.md"),
   "OVERRIDE_CONTEXT_MARKER\nThis override replaces AGENTS.md in this directory.\n",
 );
 const overrideFiles = loadProjectContextFiles({
-  cwd: projectDir,
+  cwd: absentDir,
   agentDir: overrideDir,
 });
 assert.equal(overrideFiles[0].path, join(overrideDir, "AGENTS.override.md"));
 assert.match(overrideFiles[0].content, /OVERRIDE_CONTEXT_MARKER/);
 assert.ok(!overrideFiles[0].content.includes("gsd-discuss"));
 assert.ok(
-  overrideFiles.some((file) => file.path === join(projectDir, "AGENTS.md")),
+  overrideFiles.some((file) => file.path === join(absentDir, "AGENTS.md")),
   "override of global context must not drop Firstmate project context",
 );
 
-const customAgentDir = mkdtempSync(join(tmpdir(), "firstmate-policy-custom-agent-"));
+const customAgentDir = join(tmpDir, "custom-agent");
 mkdirSync(customAgentDir, { recursive: true });
 const customFiles = loadProjectContextFiles({
-  cwd: projectDir,
+  cwd: absentDir,
   agentDir: customAgentDir,
 });
 assert.ok(
   !customFiles.some((file) => file.content === policy),
   "custom Pi agent directories without this file must not claim policy delivery",
 );
-assert.ok(customFiles.some((file) => file.path === join(projectDir, "AGENTS.md")));
+assert.ok(customFiles.some((file) => file.path === join(absentDir, "AGENTS.md")));
 EOF
 
-# Development-only live model checks are not this suite. Instruction presence
-# for ambiguous feature, already-authorized outcome, plan-only, and
-# nonrecursive worker behavior is asserted above and does not prove obedience.
-if [ "${FIRSTMATE_POLICY_MODEL_CHECKS:-}" = 1 ]; then
-  printf 'firstmate-policy.test.sh: live model checks are development-only and are not run as deterministic tests\n'
-fi
-
-printf 'ok - Pi context loader emits Firstmate coordinator policy with isolated global and project context\n'
+printf 'ok - Pi context loader emits Firstmate coordinator policy with isolated global, absent, stale, and worker context\n'

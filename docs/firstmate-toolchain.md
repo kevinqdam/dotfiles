@@ -134,7 +134,8 @@ Preserve unrelated captain choices and the existing model/effort values. Never d
 Separately inspect-then-update `data/captain.md` so the cycle records the accepted prior-authorization exception and points at `agents/pi/AGENTS.md`. Do not commit that private memory, and do not overwrite it through activation.
 
 After this change is in the canonical `~/.dotfiles` checkout, run `cd ~/.dotfiles && ./rebuild.sh`, then reload Pi context or start a fresh session. Do not restart the no-mistakes daemon.
-Verify cold-start delivery with captain memory absent and with stale memory present: the policy supersedes older standing workflow wording while preserving current captain instructions and task scope.
+Verify cold-start delivery with captain memory absent and with stale memory present: the policy supersedes older standing workflow wording, including older unconditional fresh-go captain memory, while preserving current captain instructions and task scope.
+Isolated prompt-composition fixtures and development-only model checks live in `tests/firstmate-policy.test.sh` and `tests/firstmate-policy-model-checks.sh`. They do not replace live-home rebuild and reload.
 
 `--no-context-files`, `AGENTS.override.md`, and custom Pi agent directories are unsupported delivery surfaces until explicitly covered.
 
