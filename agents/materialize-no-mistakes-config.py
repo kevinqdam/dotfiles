@@ -11,12 +11,12 @@ import stat
 import sys
 
 APPROVED_AGENT = "pi"
-APPROVED_PI_ARGS = ("--model", "xai/grok-4.6", "--thinking", "high")
+DEFAULT_PI_ARGS = ("--model", "xai/grok-4.6", "--thinking", "high")
 CONFIG_NAME = "config.yaml"
 MAX_BYTES = 1_048_576
 STUB = """\
-# Pipeline execution matches Firstmate: Pi + Grok (test/lint/push/PR).
-# High-reasoning review is a separate Firstmate Astra pass, not this file.
+# Pipeline execution defaults to Pi with Grok; explicit captain model choices
+# are preserved. High-reasoning review is a separate Firstmate Astra pass.
 agent: pi
 agent_args_override:
   pi:
@@ -283,7 +283,7 @@ def pi_block(indent: int) -> list[str]:
     inner = indent + 2
     pad = " " * indent
     nested = " " * inner
-    return [f"{pad}pi:"] + [f"{nested}- {item}" for item in APPROVED_PI_ARGS]
+    return [f"{pad}pi:"] + [f"{nested}- {item}" for item in DEFAULT_PI_ARGS]
 
 
 def insert_index_for_agent(lines: list[str]) -> int:
@@ -327,8 +327,7 @@ def ensure_pi_args(lines: list[str]) -> bool:
     index, value = found
     end = node_end(lines, index, 0, len(lines), value)
     if value is not None:
-        lines[index:end] = ["agent_args_override:"] + pi_block(2)
-        return True
+        return False
     child_indent = first_content_indent(lines, index + 1, end)
     if child_indent is None:
         lines[index + 1:index + 1] = pi_block(2)
@@ -337,12 +336,10 @@ def ensure_pi_args(lines: list[str]) -> bool:
     if child is None:
         lines[index + 1:index + 1] = pi_block(child_indent)
         return True
-    child_index, child_value = child
-    child_end = node_end(lines, child_index, child_indent, end, child_value)
-    if child_value is None and current_pi_args(lines) == APPROVED_PI_ARGS:
-        return False
-    lines[child_index:child_end] = pi_block(child_indent)
-    return True
+    # Once the operator has supplied a Pi node, preserve it verbatim. This
+    # includes model/provider, thinking, extra flags, comments, and an
+    # explicitly empty or otherwise unsupported value.
+    return False
 
 
 def converge(text: str) -> str | None:

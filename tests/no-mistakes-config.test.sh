@@ -91,10 +91,15 @@ routing_json() {
   ' "$1"
 }
 
-assert_approved_routing() {
+assert_pi_agent() {
+  file=$1
+  assert_eq 'pi' "$(routing_json "$file" | jq -r .agent)"
+}
+
+assert_default_routing() {
   file=$1
   json=$(routing_json "$file")
-  assert_eq 'pi' "$(printf '%s\n' "$json" | jq -r .agent)"
+  assert_pi_agent "$file"
   assert_eq '["--model","xai/grok-4.6","--thinking","high"]' \
     "$(printf '%s\n' "$json" | jq -c .pi_args)"
 }
@@ -105,7 +110,7 @@ fresh="$TMP/fresh"
 python3 "$MATERIALIZER" "$fresh" >/dev/null
 [ -f "$fresh/config.yaml" ] || fail 'missing config.yaml'
 [ ! -L "$fresh/config.yaml" ] || fail 'created config.yaml is a symlink'
-assert_approved_routing "$fresh/config.yaml"
+assert_default_routing "$fresh/config.yaml"
 fresh_json=$(routing_json "$fresh/config.yaml")
 printf '%s\n' "$fresh_json" | jq -e '.keys == ["agent","agent_args_override"]' \
   >/dev/null || fail 'fresh config was not limited to the approved routing keys'
@@ -130,7 +135,7 @@ EOF
 printf 'daemon-pid\n' > "$populated/daemon.pid"
 printf 'sqlite\n' > "$populated/state.sqlite"
 python3 "$MATERIALIZER" "$populated" >/dev/null
-assert_approved_routing "$populated/config.yaml"
+assert_default_routing "$populated/config.yaml"
 populated_json=$(routing_json "$populated/config.yaml")
 assert_eq '168h' "$(printf '%s\n' "$populated_json" | jq -r .ci_timeout)"
 assert_eq 'true' "$(printf '%s\n' "$populated_json" | jq -r .session_reuse)"
@@ -155,8 +160,9 @@ agent_args_override:
     - gpt-4.1
 EOF
 python3 "$MATERIALIZER" "$overrides" >/dev/null
-assert_approved_routing "$overrides/config.yaml"
+assert_pi_agent "$overrides/config.yaml"
 overrides_json=$(routing_json "$overrides/config.yaml")
+assert_eq '["--model","gpt-4.1"]' "$(printf '%s\n' "$overrides_json" | jq -c .pi_args)"
 assert_eq '42h' "$(printf '%s\n' "$overrides_json" | jq -r .ci_timeout)"
 assert_eq '["--foo"]' "$(printf '%s\n' "$overrides_json" | jq -c .codex_args)"
 
@@ -173,8 +179,9 @@ agent_args_override: # flags
     - gpt-4.1
 EOF
 python3 "$MATERIALIZER" "$commented" >/dev/null
-assert_approved_routing "$commented/config.yaml"
+assert_pi_agent "$commented/config.yaml"
 commented_json=$(routing_json "$commented/config.yaml")
+assert_eq '["--model","gpt-4.1"]' "$(printf '%s\n' "$commented_json" | jq -c .pi_args)"
 assert_eq '12h' "$(printf '%s\n' "$commented_json" | jq -r .ci_timeout)"
 assert_eq '["--foo"]' "$(printf '%s\n' "$commented_json" | jq -c .codex_args)"
 
@@ -183,7 +190,7 @@ mkdir -p "$already"
 cp "$overrides/config.yaml" "$already/config.yaml"
 before_inode=$(inode_of "$already/config.yaml")
 python3 "$MATERIALIZER" "$already" >/dev/null
-assert_approved_routing "$already/config.yaml"
+assert_pi_agent "$already/config.yaml"
 assert_eq "$before_inode" "$(inode_of "$already/config.yaml")"
 cmp -s "$overrides/config.yaml" "$already/config.yaml" \
   || fail 'already-correct config was rewritten'
@@ -192,15 +199,41 @@ flow="$TMP/flow"
 mkdir -p "$flow"
 printf 'agent: [codex, claude]\nci_timeout: "9h"\n' > "$flow/config.yaml"
 python3 "$MATERIALIZER" "$flow" >/dev/null
-assert_approved_routing "$flow/config.yaml"
+assert_default_routing "$flow/config.yaml"
 assert_eq '9h' "$(routing_json "$flow/config.yaml" | jq -r .ci_timeout)"
 
 missing_override="$TMP/missing-override"
 mkdir -p "$missing_override"
 printf 'agent: pi\nlog_level: debug\n' > "$missing_override/config.yaml"
 python3 "$MATERIALIZER" "$missing_override" >/dev/null
-assert_approved_routing "$missing_override/config.yaml"
+assert_default_routing "$missing_override/config.yaml"
 assert_eq 'debug' "$(routing_json "$missing_override/config.yaml" | jq -r .log_level)"
+
+operator_openai="$TMP/operator-openai"
+mkdir -p "$operator_openai"
+cat > "$operator_openai/config.yaml" <<'EOF'
+agent: auto
+agent_args_override:
+  pi:
+    - --model
+    - openai-codex/gpt-5.6-luna
+    - --thinking
+    - high
+    - --verbose
+EOF
+python3 "$MATERIALIZER" "$operator_openai" >/dev/null
+operator_json=$(routing_json "$operator_openai/config.yaml")
+assert_pi_agent "$operator_openai/config.yaml"
+assert_eq '["--model","openai-codex/gpt-5.6-luna","--thinking","high","--verbose"]' \
+  "$(printf '%s\n' "$operator_json" | jq -c .pi_args)"
+
+explicit_empty="$TMP/explicit-empty"
+mkdir -p "$explicit_empty"
+printf 'agent: pi\nagent_args_override:\n  pi: []\n' > "$explicit_empty/config.yaml"
+python3 "$MATERIALIZER" "$explicit_empty" >/dev/null
+empty_json=$(routing_json "$explicit_empty/config.yaml")
+assert_pi_agent "$explicit_empty/config.yaml"
+assert_eq '[]' "$(printf '%s\n' "$empty_json" | jq -c .pi_args)"
 
 conflict="$TMP/conflict"
 mkdir -p "$conflict"

@@ -34,17 +34,17 @@ Plan-only remains plan-only. Enter `gsd-plan` now. Use a short `gsd-discuss` onl
 
 ### gsd-work
 
-Grok implements, tests, lints, and drives no-mistakes/CI.
+The implementation worker implements, tests, lints, and drives no-mistakes/CI.
 
 Firstmate obtains one bounded Astra-high review of finished output before calling a PR ready, and records the reviewed revision. Never omit that look to save quota. Astra never implements, runs tests, or watches CI during this look.
 
-Grok resolves findings. Unresolved blockers prevent readiness.
+The implementation worker resolves findings. Unresolved blockers prevent readiness.
 
-After the look, skip no-mistakes's `review` step, not validation. Keep the no-mistakes agent as Pi+Grok, never `auto` (auto picks Codex). No automatic second Astra loop. The look is not implicit merge permission.
+After the look, skip no-mistakes's `review` step, not validation. Keep the no-mistakes agent as Pi, never `auto` (auto picks Codex). Model and effort are defaults, not pins: preserve the captain-selected Pi model, including an explicit OpenAI quota fallback. No automatic second Astra loop. The look is not implicit merge permission.
 
 ## Roles
 
-- Firstmate Grok medium: interview, route, and pack context.
+- Firstmate interview/routing worker medium: interview, route, and pack context.
 - Astra high: the plan artifact, then one bounded finished-output review per ship. Those are distinct slots.
-- Grok high: implementation, tests, lint, no-mistakes, and CI.
+- Default implementation worker high: implementation, tests, lint, no-mistakes, and CI; an explicit captain-selected model takes precedence.
 - Workers, scouts, and no-mistakes step agents: execute the assigned phase only. No recursive cycle.
