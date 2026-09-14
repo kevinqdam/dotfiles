@@ -60,6 +60,7 @@
       }
       "chatgpt"
       "codex"
+      "ghostty"
       "google-drive"
       "google-chrome"
       "google-gemini"
