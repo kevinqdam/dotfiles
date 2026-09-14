@@ -17,9 +17,9 @@ This system is fully declarative and managed by **Nix, Nix-Darwin, Nix-Homebrew,
 
 ### 1. Installing / Removing Packages
 - **Never** run global imperative package managers (e.g., `brew install`, `npm install -g`, `pip install`, `gem install`) to install system-wide tools.
-- To install/remove command-line tools: Add/remove them in `~/dev/dotfiles/home.nix` under `home.packages`.
-- To install/remove macOS GUI apps: Add/remove them in `~/dev/dotfiles/darwin-configuration.nix` under `homebrew.casks`.
-- To install/remove macOS-specific Homebrew formulae: Add/remove them in `~/dev/dotfiles/darwin-configuration.nix` under `homebrew.brews`.
+- To install/remove command-line tools: Add/remove them in the active dotfiles clone's `home.nix` under `home.packages`.
+- To install/remove macOS GUI apps: Add/remove them in the active dotfiles clone's `darwin-configuration.nix` under `homebrew.casks`.
+- To install/remove macOS-specific Homebrew formulae: Add/remove them in the active dotfiles clone's `darwin-configuration.nix` under `homebrew.brews`.
 
 ### 2. Modifying Configurations (Dotfiles)
 - Do **not** attempt to modify configuration files (like `~/.zshrc`, `~/.gitconfig`, `~/.vimrc`, `~/.config/...`) directly in the home directory. They are read-only symlinks managed by Home Manager.
@@ -30,6 +30,7 @@ This system is fully declarative and managed by **Nix, Nix-Darwin, Nix-Homebrew,
   ```bash
   cd ~/.dotfiles
   ./rebuild.sh
+  # Or, from any fresh clone, run that clone's ./rebuild.sh directly.
   ```
 - **Do not** run `sudo ./rebuild.sh`. The script runs `nix build` as the user and escalates to `sudo` internally only when activating the system.
 
