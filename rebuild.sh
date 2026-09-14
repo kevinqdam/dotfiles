@@ -20,6 +20,11 @@ case "${1:-}" in
     ;;
 esac
 
+for command in dirname readlink git nix sudo id; do
+  command -v "$command" >/dev/null 2>&1 \
+    || fail "required command unavailable: $command"
+done
+
 script_source=${BASH_SOURCE[0]}
 case "$script_source" in
   /*) ;;
@@ -40,6 +45,9 @@ for _ in {1..40}; do
     /*) script_source=$script_target ;;
     *) script_source="$script_dir/$script_target" ;;
   esac
+  if [ ! -e "$script_source" ] && [ ! -L "$script_source" ]; then
+    fail "script target does not exist: $script_source"
+  fi
 done
 
 [ ! -L "$script_source" ] || fail "too many script symlink levels"
@@ -69,4 +77,8 @@ echo "Applying the system configuration..."
 sudo ./result/sw/bin/darwin-rebuild switch --flake "$repo_root#macbook"
 
 # Keep the upstream Firstmate checkout current after the system is applied.
-./agents/setup-harnesses
+./agents/setup-harnesses || {
+  status=$?
+  printf 'rebuild: system activation completed, but post-activation setup failed\n' >&2
+  exit "$status"
+}

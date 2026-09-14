@@ -23,7 +23,7 @@ This system is fully declarative and managed by **Nix, Nix-Darwin, Nix-Homebrew,
 
 ### 2. Modifying Configurations (Dotfiles)
 - Do **not** attempt to modify configuration files (like `~/.zshrc`, `~/.gitconfig`, `~/.vimrc`, `~/.config/...`) directly in the home directory. They are read-only symlinks managed by Home Manager.
-- To modify configurations, edit the corresponding source files inside `~/dev/dotfiles/` (e.g., `home.nix` or `darwin-configuration.nix`).
+- To modify configurations, edit the corresponding source files inside the active dotfiles clone (e.g., `home.nix` or `darwin-configuration.nix`).
 
 ### 3. Applying Changes
 - After making any changes to the Nix configuration, run the rebuild script:
@@ -31,6 +31,7 @@ This system is fully declarative and managed by **Nix, Nix-Darwin, Nix-Homebrew,
   cd ~/.dotfiles
   ./rebuild.sh
   # Or, from any fresh clone, run that clone's ./rebuild.sh directly.
+  # The wrapper stages all changes in the selected clone before building.
   ```
 - **Do not** run `sudo ./rebuild.sh`. The script runs `nix build` as the user and escalates to `sudo` internally only when activating the system.
 
