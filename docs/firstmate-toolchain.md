@@ -104,11 +104,11 @@ It converges the no-mistakes harness safely:
 The `agent: pi` key is enforced for test, lint, push, and PR; it is not `auto`, which would hire Codex because Codex is installed. Existing operator-selected Pi arguments, including provider, model, thinking, extra flags, comments, and an explicit empty list, are preserved verbatim. Captain-approved quota fallback may therefore select OpenAI through Pi without becoming a rebuild-time hard pin. Grok Bot.app is not this agent, and the grok CLI is not installed; Grok remains only the initial default.
 
 Missing keys receive the default values. Unrelated captain-owned keys such as `ci_timeout` and `auto_fix` stay.
-A symlink, directory, or other non-regular `config.yaml` fails closed instead of replacing live daemon state.
+A symlink, directory, or other non-regular `config.yaml` fails closed instead of replacing live daemon state. Unsupported inline, scalar, or sequence `agent_args_override` containers also fail closed rather than being rewritten.
 
 The Astra plan slot and the required single finished-output review slot are distinct Firstmate passes on `gpt-6-astra` at high, at most those two bounded looks.
 Firstmate owns both slots because no-mistakes has no per-step agent today; running review inside no-mistakes would use its configured Pi route or, with `agent: auto`, Codex.
-Never omit the finished-output review to save quota. After that look, the implementation worker drives no-mistakes with `--skip=review` so the no-mistakes review step does not launch Codex; do not skip validation. Keep the no-mistakes agent Pi, while preserving the captain-selected model and allowing the documented OpenAI quota fallback. Quota conservation is not a skip.
+Never omit the finished-output review to save quota. After that look, Grok drives no-mistakes with `--skip=review` so the no-mistakes review step does not launch Codex; do not skip validation. Keep the no-mistakes agent Pi, while preserving the captain-selected model and allowing the documented OpenAI quota fallback. Quota conservation is not a skip.
 
 ## Firstmate coordinator policy
 
