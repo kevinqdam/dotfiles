@@ -1,23 +1,19 @@
 #!/usr/bin/env bash
-# Behavioral contract for explicit Homebrew upgrade mode in rebuild.sh.
+# Behavioral contract for clone-local rebuild source selection.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-CONVERGER="$SCRIPT_DIR/agents/converge-firstmate-homebrew"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/rebuild-test.XXXXXX")
+TMP=$(cd "$TMP" && pwd -P)
 trap 'rm -rf "$TMP"' EXIT
 
-worktree="$TMP/worktree"
 home="$TMP/home"
 bin_dir="$TMP/bin"
 log="$TMP/log"
 calls="$TMP/brew-calls"
 state="$TMP/state"
 brew="$bin_dir/brew"
-mkdir -p "$worktree/agents" "$home" "$bin_dir" "$state"
-cp "$SCRIPT_DIR/rebuild.sh" "$worktree/rebuild.sh"
-chmod +x "$worktree/rebuild.sh"
-ln -s "$worktree" "$home/.dotfiles"
+mkdir -p "$home" "$bin_dir" "$state" "$TMP/cwd" "$TMP/other"
 
 fail() {
   printf 'rebuild.test.sh: %s\n' "$*" >&2
@@ -30,9 +26,45 @@ assert_eq() {
   [ "$expected" = "$actual" ] || fail "expected '$expected', got '$actual'"
 }
 
-# Use the production convergence helper with an executable fake Homebrew. The
-# fake models Homebrew's installer-manual Logi Tune failure, so accidentally
-# including it in the automated command fails before the Nix rebuild.
+assert_log_exact() {
+  expected=$1
+  actual=$(cat "$log")
+  [ "$expected" = "$actual" ] || {
+    printf 'log:\n%s\n' "$actual" >&2
+    fail "unexpected stage log"
+  }
+}
+
+create_fixture() {
+  local root=$1
+  mkdir -p "$root/agents"
+  cp "$SCRIPT_DIR/rebuild.sh" "$root/rebuild.sh"
+  chmod +x "$root/rebuild.sh"
+  : > "$root/flake.nix"
+  cat > "$root/agents/converge-firstmate-homebrew" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+: "\${LOG:?}"
+printf 'upgrade-helper cwd=%s args=%s\\n' "\$PWD" "\$*" >> "\$LOG"
+exec "$SCRIPT_DIR/agents/converge-firstmate-homebrew" "$brew" "\$2"
+EOF
+  cat > "$root/agents/setup-harnesses" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+: "${LOG:?}"
+printf 'setup cwd=%s\n' "$PWD" >> "$LOG"
+if [ "${FAIL_STAGE:-}" = setup ]; then
+  exit 43
+fi
+EOF
+  chmod +x "$root/agents/converge-firstmate-homebrew" "$root/agents/setup-harnesses"
+}
+
+root="$TMP/clone with spaces"
+other_root="$TMP/other-clone"
+create_fixture "$root"
+create_fixture "$other_root"
+
 cat > "$brew" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -43,123 +75,174 @@ set -euo pipefail
 [ "${HOMEBREW_NO_AUTO_UPDATE:-}" = 1 ]
 [ "${HOMEBREW_NO_INSTALL_CLEANUP:-}" = 1 ]
 [ "${HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK:-}" = 1 ]
-
+if [ "${FAIL_STAGE:-}" = upgrade ]; then
+  exit 41
+fi
 printf 'brew %s\n' "$*" >> "$LOG"
 printf '%s\n' "$*" >> "$CALLS"
-for package in "${@:4}"; do
-  if [ "$package" = logitune ]; then
-    printf 'Error: Not upgrading 1 installer manual cask\n' >&2
-    exit 1
-  fi
-done
-
-expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code'
-if [ "$*" != "$expected" ]; then
+expected='upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex ghostty google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code'
+[ "$*" = "$expected" ] || {
   printf 'unexpected Homebrew command: %s\n' "$*" >&2
   exit 97
-fi
-
+}
 : > "$STATE/homebrew-upgrade"
-: > "$STATE/raycast-updated"
 EOF
 chmod +x "$brew"
-
-# The real helper receives the rebuild path's normal Homebrew argument, but the
-# fixture routes it to the fake executable above without changing production.
-cat > "$worktree/agents/converge-firstmate-homebrew" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-: "\${LOG:?}"
-printf 'upgrade-helper %s\\n' "\$*" >> "\$LOG"
-exec "$CONVERGER" "$brew" "\$2"
-EOF
-chmod +x "$worktree/agents/converge-firstmate-homebrew"
-
-cat > "$worktree/agents/setup-harnesses" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-: "${LOG:?}"
-printf 'setup-harnesses\n' >> "$LOG"
-EOF
-chmod +x "$worktree/agents/setup-harnesses"
 
 cat > "$bin_dir/git" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 : "${LOG:?}"
-printf 'git %s\n' "$*" >> "$LOG"
+printf 'git cwd=%s args=%s\n' "$PWD" "$*" >> "$LOG"
 EOF
-
 cat > "$bin_dir/nix" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 : "${LOG:?}"
-: "${STATE:?}"
-printf 'nix %s\n' "$*" >> "$LOG"
-if [ "${EXPECT_UPGRADE:-0}" = 1 ]; then
-  [ -e "$STATE/homebrew-upgrade" ] || {
-    printf 'Nix rebuild started before the requested Homebrew upgrade\n' >&2
-    exit 97
-  }
-  [ -e "$STATE/raycast-updated" ] || {
-    printf 'Nix rebuild did not follow the targeted Homebrew upgrade\n' >&2
-    exit 98
-  }
+[ "$#" -eq 2 ] || exit 94
+printf 'nix cwd=%s args=%s\n' "$PWD" "$*" >> "$LOG"
+if [ "${FAIL_STAGE:-}" = nix ]; then
+  exit 42
 fi
 EOF
-
 cat > "$bin_dir/sudo" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 : "${LOG:?}"
-printf 'sudo %s\n' "$*" >> "$LOG"
+[ "$#" -eq 4 ] || exit 95
+printf 'sudo cwd=%s args=%s\n' "$PWD" "$*" >> "$LOG"
+if [ "${FAIL_STAGE:-}" = sudo ]; then
+  exit 44
+fi
 EOF
 chmod +x "$bin_dir/git" "$bin_dir/nix" "$bin_dir/sudo"
 
 path_with_fakes="$bin_dir:$PATH"
 run_rebuild() {
-  expected_upgrade=$1
-  shift
-  HOME="$home" PATH="$path_with_fakes" EXPECT_UPGRADE="$expected_upgrade" \
-    LOG="$log" CALLS="$calls" STATE="$state" \
-    "$worktree/rebuild.sh" "$@"
+  local script=$1
+  local cwd=$2
+  shift 2
+  (cd "$cwd" && HOME="$home" PATH="$path_with_fakes" \
+    FAIL_STAGE="${FAIL_STAGE:-}" LOG="$log" CALLS="$calls" STATE="$state" \
+    "$script" "$@")
 }
 
-# Plain rebuilds retain the normal declarative build and activation flow but do
-# not invoke the mutable package-upgrade helper.
-: > "$log"
-: > "$calls"
-rm -f "$state/homebrew-upgrade" "$state/raycast-updated"
-run_rebuild 0
-assert_eq $'git add .\nnix build .#darwinConfigurations.macbook.system\nsudo ./result/sw/bin/darwin-rebuild switch --flake .#macbook\nsetup-harnesses' "$(cat "$log")"
-[ ! -e "$state/homebrew-upgrade" ] || fail 'plain rebuild unexpectedly ran Homebrew upgrades'
-[ ! -s "$calls" ] || fail 'plain rebuild unexpectedly invoked Homebrew'
+run_alias() {
+  local cwd=$1
+  local command=nix-rebuild
+  local alias_script="alias nix-rebuild=\"~/.dotfiles/rebuild.sh\"; eval \"\$1\""
+  [ "${2:-}" = --upgrade ] && command='nix-rebuild --upgrade'
+  (cd "$cwd" && HOME="$home" PATH="$path_with_fakes" \
+    FAIL_STAGE="${FAIL_STAGE:-}" LOG="$log" CALLS="$calls" STATE="$state" \
+    "$(command -v zsh)" -dfi -c "$alias_script" -- "$command")
+}
 
-# --upgrade runs the production helper before staging and the normal Nix
-# rebuild. A manual cask that Homebrew would reject cannot stop the rebuild
-# because it is absent from the explicit automated invocation.
+# A direct clone works without ~/.dotfiles and is independent of the caller's cwd.
+rm -f "$home/.dotfiles"
 : > "$log"
 : > "$calls"
-rm -f "$state/homebrew-upgrade" "$state/raycast-updated"
-if ! run_rebuild 1 --upgrade; then
-  fail 'installer-manual Logi Tune prevented the Nix rebuild'
-fi
-expected_upgrade=$'upgrade-helper /opt/homebrew/bin/brew '"$(id -un)"$'\nbrew upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code\ngit add .\nnix build .#darwinConfigurations.macbook.system\nsudo ./result/sw/bin/darwin-rebuild switch --flake .#macbook\nsetup-harnesses'
-assert_eq "$expected_upgrade" "$(cat "$log")"
-assert_eq 'upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code' "$(cat "$calls")"
-[ -e "$state/homebrew-upgrade" ] || fail 'upgrade mode did not complete Homebrew upgrades'
-[ -e "$state/raycast-updated" ] || fail 'upgrade mode did not upgrade Raycast'
+rm -f "$state/homebrew-upgrade"
+run_rebuild "$root/rebuild.sh" "$TMP/cwd"
+assert_log_exact $'git cwd='"$root"$' args=add .\nnix cwd='"$root"$' args=build '"$root"$'#darwinConfigurations.macbook.system\nsudo cwd='"$root"$' args=./result/sw/bin/darwin-rebuild switch --flake '"$root"$'#macbook\nsetup cwd='"$root"
+[ ! -e "$home/.dotfiles" ] || fail 'direct clone unexpectedly required ~/.dotfiles'
 
-# Flags outside the explicit interface fail before any rebuild side effect.
+# The existing interactive alias target remains a valid symlink invocation.
+ln -s "$root" "$home/.dotfiles"
 : > "$log"
 : > "$calls"
-rm -f "$state/homebrew-upgrade" "$state/raycast-updated"
-if run_rebuild 0 --unknown >/dev/null 2>"$TMP/unknown.err"; then
-  fail 'unknown rebuild flag was accepted'
+rm -f "$state/homebrew-upgrade"
+run_alias "$TMP/cwd" --upgrade
+assert_log_exact $'upgrade-helper cwd='"$root"$' args=/opt/homebrew/bin/brew '"$(id -un)"$'\nbrew upgrade --greedy --no-ask pi-coding-agent herdr antigravity-cli chatgpt codex ghostty google-drive google-chrome google-gemini grok-bot iterm2 raycast superwhisper tailscale-app visual-studio-code\ngit cwd='"$root"$' args=add .\nnix cwd='"$root"$' args=build '"$root"$'#darwinConfigurations.macbook.system\nsudo cwd='"$root"$' args=./result/sw/bin/darwin-rebuild switch --flake '"$root"$'#macbook\nsetup cwd='"$root"
+[ -e "$home/.dotfiles" ] || fail 'alias target symlink was removed'
+[ -e "$state/homebrew-upgrade" ] || fail 'upgrade stage did not run'
+
+# A second direct clone wins over an unrelated existing ~/.dotfiles target.
+: > "$log"
+: > "$calls"
+rm -f "$state/homebrew-upgrade"
+run_rebuild "$other_root/rebuild.sh" "$TMP/cwd"
+assert_log_exact $'git cwd='"$other_root"$' args=add .\nnix cwd='"$other_root"$' args=build '"$other_root"$'#darwinConfigurations.macbook.system\nsudo cwd='"$other_root"$' args=./result/sw/bin/darwin-rebuild switch --flake '"$other_root"$'#macbook\nsetup cwd='"$other_root"
+
+# Relative wrapper symlinks resolve to the target clone.
+ln -s 'clone with spaces/rebuild.sh' "$TMP/wrapper-link"
+: > "$log"
+run_rebuild "$TMP/wrapper-link" "$TMP/cwd"
+assert_log_exact $'git cwd='"$root"$' args=add .\nnix cwd='"$root"$' args=build '"$root"$'#darwinConfigurations.macbook.system\nsudo cwd='"$root"$' args=./result/sw/bin/darwin-rebuild switch --flake '"$root"$'#macbook\nsetup cwd='"$root"
+
+# Failed build, activation, setup, and upgrade stages stop downstream work.
+mkdir -p "$root/result"
+printf stale > "$root/result/stale"
+: > "$log"
+if FAIL_STAGE=nix run_rebuild "$root/rebuild.sh" "$TMP/cwd"; then fail 'failed build was accepted'; fi
+assert_log_exact $'git cwd='"$root"$' args=add .\nnix cwd='"$root"$' args=build '"$root"$'#darwinConfigurations.macbook.system'
+[ -e "$root/result/stale" ] || fail 'failed build removed stale result'
+: > "$log"
+if FAIL_STAGE=sudo run_rebuild "$root/rebuild.sh" "$TMP/cwd"; then fail 'failed activation was accepted'; fi
+assert_log_exact $'git cwd='"$root"$' args=add .\nnix cwd='"$root"$' args=build '"$root"$'#darwinConfigurations.macbook.system\nsudo cwd='"$root"$' args=./result/sw/bin/darwin-rebuild switch --flake '"$root"$'#macbook'
+: > "$log"
+if FAIL_STAGE=setup run_rebuild "$root/rebuild.sh" "$TMP/cwd" 2>"$TMP/setup.err"; then fail 'failed setup was accepted'; fi
+assert_log_exact $'git cwd='"$root"$' args=add .\nnix cwd='"$root"$' args=build '"$root"$'#darwinConfigurations.macbook.system\nsudo cwd='"$root"$' args=./result/sw/bin/darwin-rebuild switch --flake '"$root"$'#macbook\nsetup cwd='"$root"
+
+grep -Fqx 'rebuild: system activation completed, but post-activation setup failed' "$TMP/setup.err" \
+  || fail 'setup failure diagnostic was not actionable'
+: > "$log"
+if FAIL_STAGE=upgrade run_rebuild "$root/rebuild.sh" "$TMP/cwd" --upgrade; then fail 'failed upgrade was accepted'; fi
+assert_log_exact $'upgrade-helper cwd='"$root"$' args=/opt/homebrew/bin/brew '"$(id -un)"
+
+# Missing indispensable commands fail before any upgrade or staging side effect.
+minimal_bin="$TMP/minimal-bin"
+mkdir -p "$minimal_bin"
+for command in bash dirname readlink git sudo id; do
+  ln -s "$(command -v "$command")" "$minimal_bin/$command"
+done
+: > "$log"
+if (cd "$TMP/cwd" && HOME="$home" PATH="$minimal_bin" LOG="$log" \
+  "$root/rebuild.sh") 2>"$TMP/missing-nix.err"; then
+  fail 'missing Nix prerequisite was accepted'
 fi
-[ ! -s "$log" ] || fail 'unknown flag caused a rebuild side effect'
-[ ! -s "$calls" ] || fail 'unknown flag invoked Homebrew'
-[ ! -e "$state/homebrew-upgrade" ] || fail 'unknown flag ran Homebrew upgrades'
+grep -Fqx 'rebuild: required command unavailable: nix' "$TMP/missing-nix.err" \
+  || fail 'missing Nix diagnostic was not actionable'
+[ ! -s "$log" ] || fail 'missing prerequisite caused a side effect'
+
+# Missing repository inputs fail closed without side effects.
+incomplete="$TMP/incomplete"
+mkdir -p "$incomplete/agents"
+cp "$SCRIPT_DIR/rebuild.sh" "$incomplete/rebuild.sh"
+chmod +x "$incomplete/rebuild.sh"
+: > "$log"
+if run_rebuild "$incomplete/rebuild.sh" "$TMP/cwd" 2>"$TMP/incomplete.err"; then
+  fail 'incomplete repository was accepted'
+fi
+grep -Fq 'rebuild: not a dotfiles checkout:' "$TMP/incomplete.err" \
+  || fail 'missing flake diagnostic was not actionable'
+[ ! -s "$log" ] || fail 'missing source caused a side effect'
+
+# Broken and cyclic wrapper links fail closed without side effects.
+ln -s "$TMP/cycle-b" "$TMP/cycle-a"
+ln -s "$TMP/cycle-a" "$TMP/cycle-b"
+: > "$log"
+if run_rebuild "$TMP/cycle-a" "$TMP/cwd" 2>"$TMP/cycle.err"; then
+  fail 'cyclic wrapper link was accepted'
+fi
+grep -Fq 'Too many levels of symbolic links' "$TMP/cycle.err" \
+  || fail 'cyclic-link diagnostic was not actionable'
+[ ! -s "$log" ] || fail 'cyclic link caused a side effect'
+ln -s "$TMP/missing-target" "$TMP/broken-link"
+if run_rebuild "$TMP/broken-link" "$TMP/cwd" 2>"$TMP/broken.err"; then
+  fail 'broken wrapper link was accepted'
+fi
+grep -Fq 'No such file' "$TMP/broken.err" \
+  || fail 'broken-link diagnostic was not actionable'
+
+# Unknown arguments fail before repository or host side effects.
+: > "$log"
+: > "$calls"
+if run_rebuild "$root/rebuild.sh" "$TMP/cwd" --unknown >/dev/null 2>"$TMP/unknown.err"; then
+  fail 'unknown flag was accepted'
+fi
+[ ! -s "$log" ] || fail 'unknown flag caused a side effect'
 grep -Fq 'usage:' "$TMP/unknown.err" || fail 'unknown flag did not print usage'
+grep -Fqx 'alias nix-rebuild="~/.dotfiles/rebuild.sh"' "$SCRIPT_DIR/zshrc" \
+  || fail 'interactive nix-rebuild alias changed'
 
-printf 'ok - plain rebuild, manual-cask-safe upgrade ordering, Raycast upgrade, and unknown-flag rejection\n'
+printf 'ok - direct clone, linked alias, independent clone, absolute flake roots, and argument rejection\n'

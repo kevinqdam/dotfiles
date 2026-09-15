@@ -11,12 +11,12 @@ import stat
 import sys
 
 APPROVED_AGENT = "pi"
-APPROVED_PI_ARGS = ("--model", "xai/grok-4.6", "--thinking", "high")
+DEFAULT_PI_ARGS = ("--model", "xai/grok-4.6", "--thinking", "high")
 CONFIG_NAME = "config.yaml"
 MAX_BYTES = 1_048_576
 STUB = """\
-# Pipeline execution matches Firstmate: Pi + Grok (test/lint/push/PR).
-# High-reasoning review is a separate Firstmate Astra pass, not this file.
+# Pipeline execution defaults to Pi with Grok; explicit captain model choices
+# are preserved. High-reasoning review is a separate Firstmate Astra pass.
 agent: pi
 agent_args_override:
   pi:
@@ -212,20 +212,6 @@ def first_content_indent(lines: list[str], start: int, limit: int) -> int | None
     return None
 
 
-def read_sequence(lines: list[str], start: int, end: int, parent_indent: int) -> tuple[str, ...]:
-    items: list[str] = []
-    for index in range(start + 1, end):
-        indent = content_indent(lines[index])
-        if indent is None or indent <= parent_indent:
-            continue
-        body = lines[index][indent:]
-        if not body.startswith("-"):
-            continue
-        item = body[1:].strip()
-        items.append(unquote(item) if item else "")
-    return tuple(items)
-
-
 def root_is_sequence(lines: list[str]) -> bool:
     for line in lines:
         indent = content_indent(line)
@@ -258,32 +244,38 @@ def current_agent(lines: list[str]) -> str | None:
     return scalar
 
 
-def current_pi_args(lines: list[str]) -> tuple[str, ...] | None:
+def validate_agent_args_override(lines: list[str]) -> None:
     found = find_key(lines, "agent_args_override", 0, 0, len(lines))
     if found is None:
-        return None
+        return
     index, value = found
     if value is not None:
-        return None
+        raise ValueError(
+            "unsupported agent_args_override container; expected a block mapping"
+        )
     end = node_end(lines, index, 0, len(lines), value)
     child_indent = first_content_indent(lines, index + 1, end)
     if child_indent is None:
-        return None
-    child = find_key(lines, "pi", child_indent, index + 1, end)
-    if child is None:
-        return None
-    child_index, child_value = child
-    if child_value is not None:
-        return None
-    child_end = node_end(lines, child_index, child_indent, end, child_value)
-    return read_sequence(lines, child_index, child_end, child_indent)
+        return
+    for child_index in range(index + 1, end):
+        indent = content_indent(lines[child_index])
+        if indent is None:
+            continue
+        if indent < child_indent:
+            raise ValueError(
+                "unsupported agent_args_override container; expected a block mapping"
+            )
+        if indent == child_indent and parse_key_line(lines[child_index], indent) is None:
+            raise ValueError(
+                "unsupported agent_args_override container; expected a block mapping"
+            )
 
 
 def pi_block(indent: int) -> list[str]:
     inner = indent + 2
     pad = " " * indent
     nested = " " * inner
-    return [f"{pad}pi:"] + [f"{nested}- {item}" for item in APPROVED_PI_ARGS]
+    return [f"{pad}pi:"] + [f"{nested}- {item}" for item in DEFAULT_PI_ARGS]
 
 
 def insert_index_for_agent(lines: list[str]) -> int:
@@ -327,8 +319,7 @@ def ensure_pi_args(lines: list[str]) -> bool:
     index, value = found
     end = node_end(lines, index, 0, len(lines), value)
     if value is not None:
-        lines[index:end] = ["agent_args_override:"] + pi_block(2)
-        return True
+        return False
     child_indent = first_content_indent(lines, index + 1, end)
     if child_indent is None:
         lines[index + 1:index + 1] = pi_block(2)
@@ -337,12 +328,10 @@ def ensure_pi_args(lines: list[str]) -> bool:
     if child is None:
         lines[index + 1:index + 1] = pi_block(child_indent)
         return True
-    child_index, child_value = child
-    child_end = node_end(lines, child_index, child_indent, end, child_value)
-    if child_value is None and current_pi_args(lines) == APPROVED_PI_ARGS:
-        return False
-    lines[child_index:child_end] = pi_block(child_indent)
-    return True
+    # Once the operator has supplied a Pi node, preserve it verbatim. This
+    # includes model/provider, thinking, extra flags, comments, and an
+    # explicitly empty or otherwise unsupported value.
+    return False
 
 
 def converge(text: str) -> str | None:
@@ -354,6 +343,7 @@ def converge(text: str) -> str | None:
         raise ValueError("tab indentation is not supported")
     if root_is_sequence(lines):
         raise ValueError("root document is a sequence")
+    validate_agent_args_override(lines)
     changed = ensure_agent(lines)
     changed = ensure_pi_args(lines) or changed
     if not changed:

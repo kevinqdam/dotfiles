@@ -40,7 +40,7 @@ Firstmate obtains one bounded Astra-high review of finished output before callin
 
 Grok resolves findings. Unresolved blockers prevent readiness.
 
-After the look, skip no-mistakes's `review` step, not validation. Keep the no-mistakes agent as Pi+Grok, never `auto` (auto picks Codex). No automatic second Astra loop. The look is not implicit merge permission.
+After the look, skip no-mistakes's `review` step, not validation. Keep the no-mistakes agent as Pi, never `auto` (auto picks Codex). Model and effort are defaults, not pins: explicit captain-selected model and effort requests take precedence, including an OpenAI quota fallback through Pi. No automatic second Astra loop. The look is not implicit merge permission.
 
 ## Roles
 

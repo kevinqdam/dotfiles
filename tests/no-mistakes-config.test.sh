@@ -91,12 +91,26 @@ routing_json() {
   ' "$1"
 }
 
-assert_approved_routing() {
+assert_pi_agent() {
+  file=$1
+  assert_eq 'pi' "$(routing_json "$file" | jq -r .agent)"
+}
+
+assert_default_routing() {
   file=$1
   json=$(routing_json "$file")
-  assert_eq 'pi' "$(printf '%s\n' "$json" | jq -r .agent)"
+  assert_pi_agent "$file"
   assert_eq '["--model","xai/grok-4.6","--thinking","high"]' \
     "$(printf '%s\n' "$json" | jq -c .pi_args)"
+}
+
+assert_unchanged() {
+  file=$1
+  snapshot=$2
+  before_inode=$3
+  label=$4
+  cmp -s "$snapshot" "$file" || fail "$label changed bytes"
+  assert_eq "$before_inode" "$(inode_of "$file")"
 }
 
 [ ! -L "$MATERIALIZER" ] || fail 'materializer source is a symlink'
@@ -105,7 +119,7 @@ fresh="$TMP/fresh"
 python3 "$MATERIALIZER" "$fresh" >/dev/null
 [ -f "$fresh/config.yaml" ] || fail 'missing config.yaml'
 [ ! -L "$fresh/config.yaml" ] || fail 'created config.yaml is a symlink'
-assert_approved_routing "$fresh/config.yaml"
+assert_default_routing "$fresh/config.yaml"
 fresh_json=$(routing_json "$fresh/config.yaml")
 printf '%s\n' "$fresh_json" | jq -e '.keys == ["agent","agent_args_override"]' \
   >/dev/null || fail 'fresh config was not limited to the approved routing keys'
@@ -130,7 +144,7 @@ EOF
 printf 'daemon-pid\n' > "$populated/daemon.pid"
 printf 'sqlite\n' > "$populated/state.sqlite"
 python3 "$MATERIALIZER" "$populated" >/dev/null
-assert_approved_routing "$populated/config.yaml"
+assert_default_routing "$populated/config.yaml"
 populated_json=$(routing_json "$populated/config.yaml")
 assert_eq '168h' "$(printf '%s\n' "$populated_json" | jq -r .ci_timeout)"
 assert_eq 'true' "$(printf '%s\n' "$populated_json" | jq -r .session_reuse)"
@@ -155,8 +169,9 @@ agent_args_override:
     - gpt-4.1
 EOF
 python3 "$MATERIALIZER" "$overrides" >/dev/null
-assert_approved_routing "$overrides/config.yaml"
+assert_pi_agent "$overrides/config.yaml"
 overrides_json=$(routing_json "$overrides/config.yaml")
+assert_eq '["--model","gpt-4.1"]' "$(printf '%s\n' "$overrides_json" | jq -c .pi_args)"
 assert_eq '42h' "$(printf '%s\n' "$overrides_json" | jq -r .ci_timeout)"
 assert_eq '["--foo"]' "$(printf '%s\n' "$overrides_json" | jq -c .codex_args)"
 
@@ -173,8 +188,9 @@ agent_args_override: # flags
     - gpt-4.1
 EOF
 python3 "$MATERIALIZER" "$commented" >/dev/null
-assert_approved_routing "$commented/config.yaml"
+assert_pi_agent "$commented/config.yaml"
 commented_json=$(routing_json "$commented/config.yaml")
+assert_eq '["--model","gpt-4.1"]' "$(printf '%s\n' "$commented_json" | jq -c .pi_args)"
 assert_eq '12h' "$(printf '%s\n' "$commented_json" | jq -r .ci_timeout)"
 assert_eq '["--foo"]' "$(printf '%s\n' "$commented_json" | jq -c .codex_args)"
 
@@ -183,7 +199,7 @@ mkdir -p "$already"
 cp "$overrides/config.yaml" "$already/config.yaml"
 before_inode=$(inode_of "$already/config.yaml")
 python3 "$MATERIALIZER" "$already" >/dev/null
-assert_approved_routing "$already/config.yaml"
+assert_pi_agent "$already/config.yaml"
 assert_eq "$before_inode" "$(inode_of "$already/config.yaml")"
 cmp -s "$overrides/config.yaml" "$already/config.yaml" \
   || fail 'already-correct config was rewritten'
@@ -192,15 +208,148 @@ flow="$TMP/flow"
 mkdir -p "$flow"
 printf 'agent: [codex, claude]\nci_timeout: "9h"\n' > "$flow/config.yaml"
 python3 "$MATERIALIZER" "$flow" >/dev/null
-assert_approved_routing "$flow/config.yaml"
+assert_default_routing "$flow/config.yaml"
 assert_eq '9h' "$(routing_json "$flow/config.yaml" | jq -r .ci_timeout)"
 
 missing_override="$TMP/missing-override"
 mkdir -p "$missing_override"
 printf 'agent: pi\nlog_level: debug\n' > "$missing_override/config.yaml"
 python3 "$MATERIALIZER" "$missing_override" >/dev/null
-assert_approved_routing "$missing_override/config.yaml"
+assert_default_routing "$missing_override/config.yaml"
 assert_eq 'debug' "$(routing_json "$missing_override/config.yaml" | jq -r .log_level)"
+
+operator_openai="$TMP/operator-openai"
+mkdir -p "$operator_openai"
+cat > "$operator_openai/config.yaml" <<'EOF'
+agent: auto # harness must be enforced
+agent_args_override: # captain-owned routing
+  codex:
+    - --foo
+  pi: # Luna stays operator-owned
+    - "--model" # quoted option
+    - 'openai-codex/gpt-5.6-luna' # current captain-selected model
+    - "--thinking"
+    - max
+    - --verbose
+    - "captain flag"
+EOF
+python3 "$MATERIALIZER" "$operator_openai" >/dev/null
+operator_json=$(routing_json "$operator_openai/config.yaml")
+assert_pi_agent "$operator_openai/config.yaml"
+assert_eq '["--model","openai-codex/gpt-5.6-luna","--thinking","max","--verbose","captain flag"]' \
+  "$(printf '%s\n' "$operator_json" | jq -c .pi_args)"
+assert_eq '["--foo"]' "$(printf '%s\n' "$operator_json" | jq -c .codex_args)"
+grep -Fqx '  pi: # Luna stays operator-owned' "$operator_openai/config.yaml" \
+  || fail 'operator Pi comment was not preserved'
+grep -Fqx '    - "--model" # quoted option' "$operator_openai/config.yaml" \
+  || fail 'quoted operator argument was not preserved'
+operator_snapshot="$TMP/operator-openai.snapshot"
+cp "$operator_openai/config.yaml" "$operator_snapshot"
+operator_inode=$(inode_of "$operator_openai/config.yaml")
+python3 "$MATERIALIZER" "$operator_openai" >/dev/null
+assert_unchanged "$operator_openai/config.yaml" "$operator_snapshot" "$operator_inode" \
+  'repeated operator Luna convergence'
+
+inline_pi="$TMP/inline-pi"
+mkdir -p "$inline_pi"
+cat > "$inline_pi/config.yaml" <<'EOF'
+agent: auto
+agent_args_override: # inline Pi list follows
+  pi: [--model, "operator/inline", --thinking, low] # preserve this line
+  codex: [--foo]
+EOF
+python3 "$MATERIALIZER" "$inline_pi" >/dev/null
+inline_json=$(routing_json "$inline_pi/config.yaml")
+assert_pi_agent "$inline_pi/config.yaml"
+assert_eq '["--model","operator/inline","--thinking","low"]' \
+  "$(printf '%s\n' "$inline_json" | jq -c .pi_args)"
+grep -Fqx '  pi: [--model, "operator/inline", --thinking, low] # preserve this line' \
+  "$inline_pi/config.yaml" || fail 'inline Pi list was not preserved'
+inline_snapshot="$TMP/inline-pi.snapshot"
+cp "$inline_pi/config.yaml" "$inline_snapshot"
+inline_inode=$(inode_of "$inline_pi/config.yaml")
+python3 "$MATERIALIZER" "$inline_pi" >/dev/null
+assert_unchanged "$inline_pi/config.yaml" "$inline_snapshot" "$inline_inode" \
+  'repeated inline Pi convergence'
+
+operator_effort="$TMP/operator-effort"
+mkdir -p "$operator_effort"
+cat > "$operator_effort/config.yaml" <<'EOF'
+agent: pi
+agent_args_override:
+  pi:
+    - --provider
+    - operator-provider
+    - --model
+    - operator/alternate
+    - --thinking
+    - low
+EOF
+python3 "$MATERIALIZER" "$operator_effort" >/dev/null
+effort_json=$(routing_json "$operator_effort/config.yaml")
+assert_pi_agent "$operator_effort/config.yaml"
+assert_eq '["--provider","operator-provider","--model","operator/alternate","--thinking","low"]' \
+  "$(printf '%s\n' "$effort_json" | jq -c .pi_args)"
+
+missing_pi_sibling="$TMP/missing-pi-sibling"
+mkdir -p "$missing_pi_sibling"
+cat > "$missing_pi_sibling/config.yaml" <<'EOF'
+agent: auto
+ci_timeout: "33h"
+agent_args_override:
+  codex:
+    - --foo
+  claude:
+    - --bar
+EOF
+python3 "$MATERIALIZER" "$missing_pi_sibling" >/dev/null
+missing_pi_json=$(routing_json "$missing_pi_sibling/config.yaml")
+assert_default_routing "$missing_pi_sibling/config.yaml"
+assert_eq '33h' "$(printf '%s\n' "$missing_pi_json" | jq -r .ci_timeout)"
+assert_eq '["--foo"]' "$(printf '%s\n' "$missing_pi_json" | jq -c .codex_args)"
+grep -Fqx '  claude:' "$missing_pi_sibling/config.yaml" \
+  || fail 'missing-Pi sibling key was not preserved'
+grep -Fqx '    - --bar' "$missing_pi_sibling/config.yaml" \
+  || fail 'missing-Pi sibling arguments were not preserved'
+
+explicit_empty="$TMP/explicit-empty"
+mkdir -p "$explicit_empty"
+printf 'agent: pi\nagent_args_override:\n  pi: []\n' > "$explicit_empty/config.yaml"
+python3 "$MATERIALIZER" "$explicit_empty" >/dev/null
+empty_json=$(routing_json "$explicit_empty/config.yaml")
+assert_pi_agent "$explicit_empty/config.yaml"
+assert_eq '[]' "$(printf '%s\n' "$empty_json" | jq -c .pi_args)"
+
+assert_unsupported_override() {
+  name=$1
+  agent=$2
+  override=$3
+  target_home="$TMP/$name-$agent"
+  mkdir -p "$target_home"
+  printf 'agent: %s\nci_timeout: "27h"\n%s\noperator_marker: captain-owned\n' \
+    "$agent" "$override" > "$target_home/config.yaml"
+  snapshot="$TMP/$name-$agent.snapshot"
+  cp "$target_home/config.yaml" "$snapshot"
+  before_inode=$(inode_of "$target_home/config.yaml")
+  error_file="$TMP/$name-$agent.stderr"
+  if python3 "$MATERIALIZER" "$target_home" >/dev/null 2>"$error_file"; then
+    fail "$name with agent $agent was accepted"
+  fi
+  grep -Fq 'unsupported agent_args_override container' "$error_file" \
+    || fail "$name with agent $agent did not report the unsupported container"
+  assert_unchanged "$target_home/config.yaml" "$snapshot" "$before_inode" \
+    "$name with agent $agent"
+}
+
+for unsupported_agent in auto pi; do
+  assert_unsupported_override inline-sequence "$unsupported_agent" \
+    'agent_args_override: []'
+  assert_unsupported_override scalar "$unsupported_agent" \
+    'agent_args_override: captain-owned'
+  assert_unsupported_override inline-mapping "$unsupported_agent" \
+    'agent_args_override: {pi: [--model, captain/model], codex: [--foo]}'
+  assert_unsupported_override block-sequence "$unsupported_agent" $'agent_args_override:\n  - --model\n  - captain/model'
+done
 
 conflict="$TMP/conflict"
 mkdir -p "$conflict"

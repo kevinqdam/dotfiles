@@ -16,9 +16,9 @@ Pi is the `pi-coding-agent` formula, Herdr is the `herdr` formula, and Agy is th
 The flake lock pins the nix-homebrew Homebrew implementation, but it does not pin Homebrew formula metadata, cask recipes, or payloads.
 They are an explicitly mutable containment boundary: tap mutation and Homebrew's implementation auto-update are disabled, and Homebrew Bundle installs missing declarations without globally upgrading the Brewfile.
 
-Plain `./rebuild.sh` applies declarative package presence and configuration only; it keeps `homebrew.onActivation.upgrade = false` and performs no targeted version upgrades.
-`./rebuild.sh --upgrade` first runs `brew upgrade --greedy --no-ask` for the explicit allowlist of `pi-coding-agent`, `herdr`, `antigravity-cli`, `chatgpt`, `codex`, `google-drive`, `google-chrome`, `google-gemini`, `grok-bot`, `iterm2`, `raycast`, `superwhisper`, `tailscale-app`, and `visual-studio-code`, then applies the normal Nix rebuild.
-The declared `anaconda` cask is deliberately excluded from that allowlist, as are `blueutil`, `mono`, `mysql`, `mysql-client`, `tcl-tk`, and all undeclared packages.
+Plain `./rebuild.sh` applies declarative package presence and configuration only; it keeps `homebrew.onActivation.upgrade = false` and performs no targeted version upgrades. The wrapper resolves its own physical repository root, so a fresh clone can run `./rebuild.sh` without `~/.dotfiles`; the interactive `nix-rebuild` alias remains `~/.dotfiles/rebuild.sh` and continues to use that symlink target. This requires Apple Silicon macOS, the configured `kevindam` account, Git and Apple Command Line Tools, a working Nix daemon with flakes enabled, sudo rights, and network or cached Nix inputs. It does not bootstrap Nix or support arbitrary users or platforms. The wrapper resolves directory and wrapper symlinks to a complete clone; partial copies, broken or cyclic links, and Nix store copies are not supported as editable sources. `git add .` stages all local changes in the selected clone before the build.
+`./rebuild.sh --upgrade` first runs `brew upgrade --greedy --no-ask` for the explicit allowlist of `pi-coding-agent`, `herdr`, `antigravity-cli`, `chatgpt`, `codex`, `ghostty`, `google-drive`, `google-chrome`, `google-gemini`, `grok-bot`, `iterm2`, `raycast`, `superwhisper`, `tailscale-app`, and `visual-studio-code`, then applies the normal Nix rebuild.
+The clone-local wrapper root covers dotfiles staging, Nix build, activation, and invocation of the post-activation helper. `setup-harnesses` still operates on its separately configured `FIRSTMATE_ROOT` checkout (default `$HOME/dev/firstmate`), so a fresh clone requires that private mirror, SSH access, and a clean expected branch for the final setup stage; failure there occurs after system activation. The declared `anaconda` cask is deliberately excluded from that allowlist, as are `blueutil`, `mono`, `mysql`, `mysql-client`, `tcl-tk`, and all undeclared packages.
 The declared `logitune` cask (Logi Tune) is also excluded because Homebrew identifies it as installer-manual; its vendor installer or application self-update remains a manual operation. This keeps a Logi Tune update from preventing the Nix rebuild.
 A cask upgrade can download a new payload and replace its installed application bundle during the rebuild; affected applications may need to be restarted.
 Fresh machines should use a plain rebuild first so declarative Homebrew installation creates the packages before an opt-in upgrade.
@@ -96,22 +96,19 @@ Runtime state, task records, captain memory, backlog, data, project clones, cred
 Home Manager does not symlink `~/.no-mistakes/config.yaml`. Replacing that live file with a generation link would smash daemon state.
 
 Activation runs `agents/materialize-no-mistakes-config.py` against `~/.no-mistakes`.
-It converges two routing keys so rebuilds match Firstmate execution:
+It converges the no-mistakes harness safely:
 
 - `agent: pi`
-- `agent_args_override.pi`: `--model xai/grok-4.6 --thinking high`
+- a default `agent_args_override.pi`: `--model xai/grok-4.6 --thinking high` only when the Pi node is absent
 
-Those keys are the no-mistakes pipeline agent for test, lint, push, and PR.
-They are not `auto`, which would hire Codex because Codex is installed.
-Grok Bot.app is not this agent, and the grok CLI is not installed; Pi already provides the Grok model.
+The `agent: pi` key is enforced for test, lint, push, and PR; it is not `auto`, which would hire Codex because Codex is installed. Existing operator-selected Pi arguments, including provider, model, thinking, extra flags, comments, and an explicit empty list, are preserved verbatim. Captain-approved quota fallback may therefore select OpenAI through Pi without becoming a rebuild-time hard pin. Grok Bot.app is not this agent, and the grok CLI is not installed; Grok remains only the initial default.
 
-Missing keys receive the approved values.
-Unrelated captain-owned keys such as `ci_timeout` and `auto_fix` stay.
-A symlink, directory, or other non-regular `config.yaml` fails closed instead of replacing live daemon state.
+Missing keys receive the default values. Unrelated captain-owned keys such as `ci_timeout` and `auto_fix` stay.
+A symlink, directory, or other non-regular `config.yaml` fails closed instead of replacing live daemon state. Unsupported inline, scalar, or sequence `agent_args_override` containers also fail closed rather than being rewritten.
 
 The Astra plan slot and the required single finished-output review slot are distinct Firstmate passes on `gpt-6-astra` at high, at most those two bounded looks.
-Firstmate owns both slots because no-mistakes has no per-step agent today; running review inside no-mistakes would use Pi+Grok or, with `agent: auto`, Codex.
-Never omit the finished-output review to save quota. After that look, Grok drives no-mistakes with `--skip=review` so the no-mistakes review step does not launch Codex; do not skip validation. Keep the no-mistakes agent Pi+Grok. Quota conservation is not a skip.
+Firstmate owns both slots because no-mistakes has no per-step agent today; running review inside no-mistakes would use its configured Pi route or, with `agent: auto`, Codex.
+Never omit the finished-output review to save quota. After that look, Grok drives no-mistakes with `--skip=review` so the no-mistakes review step does not launch Codex; do not skip validation. Keep the no-mistakes agent Pi, while preserving the captain-selected model and allowing the documented OpenAI quota fallback. Quota conservation is not a skip.
 
 ## Firstmate coordinator policy
 
@@ -133,7 +130,7 @@ Preserve unrelated captain choices and the existing model/effort values. Never d
 
 Separately inspect-then-update `data/captain.md` so the cycle records the accepted prior-authorization exception and points at `agents/pi/AGENTS.md`. Do not commit that private memory, and do not overwrite it through activation.
 
-After this change is in the canonical `~/.dotfiles` checkout, run `cd ~/.dotfiles && ./rebuild.sh`, then reload Pi context or start a fresh session. Do not restart the no-mistakes daemon.
+For a fresh clone, run `cd /path/to/clone && ./rebuild.sh`; the wrapper uses that clone for staging, build, activation, and post-activation setup without requiring `~/.dotfiles`. The existing interactive alias remains `nix-rebuild=~/.dotfiles/rebuild.sh` and intentionally follows the linked repository target. After this change is in the canonical `~/.dotfiles` checkout, `cd ~/.dotfiles && ./rebuild.sh` remains valid. Then reload Pi context or start a fresh session. Do not restart the no-mistakes daemon.
 Verify cold-start delivery with captain memory absent and with stale memory present: the policy supersedes older standing workflow wording, including older unconditional fresh-go captain memory, while preserving current captain instructions and task scope.
 Isolated prompt-composition fixtures and development-only model checks live in `tests/firstmate-policy.test.sh` and `tests/firstmate-policy-model-checks.sh`. They do not replace live-home rebuild and reload.
 

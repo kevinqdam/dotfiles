@@ -17,24 +17,26 @@ This system is fully declarative and managed by **Nix, Nix-Darwin, Nix-Homebrew,
 
 ### 1. Installing / Removing Packages
 - **Never** run global imperative package managers (e.g., `brew install`, `npm install -g`, `pip install`, `gem install`) to install system-wide tools.
-- To install/remove command-line tools: Add/remove them in `~/dev/dotfiles/home.nix` under `home.packages`.
-- To install/remove macOS GUI apps: Add/remove them in `~/dev/dotfiles/darwin-configuration.nix` under `homebrew.casks`.
-- To install/remove macOS-specific Homebrew formulae: Add/remove them in `~/dev/dotfiles/darwin-configuration.nix` under `homebrew.brews`.
+- To install/remove command-line tools: Add/remove them in the active dotfiles clone's `home.nix` under `home.packages`.
+- To install/remove macOS GUI apps: Add/remove them in the active dotfiles clone's `darwin-configuration.nix` under `homebrew.casks`.
+- To install/remove macOS-specific Homebrew formulae: Add/remove them in the active dotfiles clone's `darwin-configuration.nix` under `homebrew.brews`.
 
 ### 2. Modifying Configurations (Dotfiles)
 - Do **not** attempt to modify configuration files (like `~/.zshrc`, `~/.gitconfig`, `~/.vimrc`, `~/.config/...`) directly in the home directory. They are read-only symlinks managed by Home Manager.
-- To modify configurations, edit the corresponding source files inside `~/dev/dotfiles/` (e.g., `home.nix` or `darwin-configuration.nix`).
+- To modify configurations, edit the corresponding source files inside the active dotfiles clone (e.g., `home.nix` or `darwin-configuration.nix`).
 
 ### 3. Applying Changes
 - After making any changes to the Nix configuration, run the rebuild script:
   ```bash
   cd ~/.dotfiles
   ./rebuild.sh
+  # Or, from any fresh clone, run that clone's ./rebuild.sh directly.
+  # The wrapper stages all changes in the selected clone before building.
   ```
 - **Do not** run `sudo ./rebuild.sh`. The script runs `nix build` as the user and escalates to `sudo` internally only when activating the system.
 
 ### 4. no-mistakes pipeline agent
-Do not Home Manager-link `~/.no-mistakes/config.yaml`; rebuilds patch Pi + Grok routing through `agents/materialize-no-mistakes-config.py`.
+Do not Home Manager-link `~/.no-mistakes/config.yaml`; rebuilds enforce the Pi harness and seed model defaults through `agents/materialize-no-mistakes-config.py`, preserving explicit captain-selected Pi routing.
 Firstmate owns the Astra review slot. See `docs/firstmate-toolchain.md`.
 
 ### 5. Pi extensions
