@@ -29,25 +29,36 @@ relative='Library/Application Support/com.mitchellh.ghostty/config.ghostty'
 vscode_settings="$REPO_ROOT/vscode/settings.json"
 
 [ -f "$source_file" ] || fail 'tracked Ghostty config source is missing'
-for setting in \
-  'font-size = 18' \
-  'cursor-style = block' \
-  'cursor-style-blink = false' \
-  'cursor-color = #d1329b' \
-  'shell-integration-features = no-cursor'; do
-  grep -Fq "$setting" "$source_file" \
-    || fail "tracked Ghostty config omitted $setting"
-done
+actual_settings=$(grep -vE '^[[:space:]]*(#|$)' "$source_file") \
+  || fail 'tracked Ghostty config has no noncomment assignments'
+duplicate_keys=$(printf '%s\n' "$actual_settings" \
+  | sed -E 's/[[:space:]]*=.*$//' | LC_ALL=C sort | uniq -d)
+[ -z "$duplicate_keys" ] || fail "duplicate Ghostty keys: $duplicate_keys"
+expected_count=0
+while IFS= read -r setting; do
+  expected_count=$((expected_count + 1))
+  count=$(printf '%s\n' "$actual_settings" | grep -Fxc -- "$setting")
+  assert_eq 1 "$count"
+done <<'EOF'
+font-size = 18
+cursor-style = block
+cursor-style-blink = false
+cursor-color = #d1329b
+shell-integration-features = no-cursor
+EOF
+actual_count=$(printf '%s\n' "$actual_settings" | grep -c .)
+assert_eq "$expected_count" "$actual_count"
 grep -Fq '"editorCursor.foreground": "#d1329b"' "$vscode_settings" \
   || fail 'VS Code cursor color is no longer the Ghostty reference pink'
 grep -Fq '"terminalCursor.foreground": "#d1329b"' "$vscode_settings" \
   || fail 'VS Code terminal cursor color is no longer the Ghostty reference pink'
-grep -Fq 'cursor-color = #d1329b' "$source_file" \
-  || fail 'Ghostty cursor color does not match the VS Code pink'
 
 generation=$(nix build --impure --no-link --print-out-paths \
   'path:.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.activationPackage')
-home_files="$generation/home-files"
+home_files=$(readlink -e "$generation/home-files")
+[ -n "$home_files" ] || fail 'Home Manager home-files path could not be resolved'
+[[ "$home_files" == *-home-manager-files ]] \
+  || fail 'resolved home-files is not a Home Manager files tree'
 generated="$home_files/$relative"
 backup_extension=$(nix eval --impure --raw \
   'path:.#darwinConfigurations.macbook.config.home-manager.backupFileExtension')
@@ -88,6 +99,7 @@ run_preflight() {
 assert_managed_link() {
   local target=$1
   [ -L "$target" ] || fail "expected $target to be a generation link"
+  assert_eq "$generated" "$(readlink "$target")"
   cmp -s "$source_file" "$target" \
     || fail "linked Ghostty config differs from the tracked source"
 }
@@ -148,19 +160,47 @@ cmp -s "$source_file" "$identical_target.backup" \
   || fail 'repeated identical-file link changed the preserved backup'
 assert_eq "$identical_inode" "$(file_inode "$identical_target.backup")"
 
-# An existing managed-generation symlink updates without a new backup.
+# An older managed-generation symlink updates to a distinct newer tree
+# without a new backup. Seed ownership with the canonical *-home-manager-files
+# path shape used by Home Manager preflight.
+old_home_files=$(nix build --impure --no-link --print-out-paths --expr "$(cat <<'NIX'
+let
+  flake = builtins.getFlake (toString ./.);
+  pkgs = flake.inputs.nixpkgs.legacyPackages.${builtins.currentSystem};
+in
+pkgs.runCommand "home-manager-files" { } ''
+  mkdir -p "$out/Library/Application Support/com.mitchellh.ghostty"
+  printf '%s\n' 'old generation ghostty' > "$out/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
+''
+NIX
+)")
+old_generated="$old_home_files/$relative"
+[ -f "$old_generated" ] || fail 'prior managed Ghostty generation is missing'
+[[ "$old_home_files" == *-home-manager-files ]] \
+  || fail 'prior generation is not a Home Manager files tree'
+[ "$old_home_files" != "$home_files" ] \
+  || fail 'prior managed generation is not distinct from the current files tree'
+cmp -s "$source_file" "$old_generated" \
+  && fail 'prior managed Ghostty generation did not use different bytes'
+
 managed_home="$TMP/managed-home"
 managed_target="$managed_home/$relative"
 mkdir -p "$(dirname "$managed_target")"
-printf 'first live ghostty\n' > "$managed_target"
-run_links "$managed_home"
-assert_managed_link "$managed_target"
-assert_eq 'first live ghostty' "$(cat "$managed_target.backup")"
+printf 'first live ghostty\n' > "$managed_target.backup"
+ln -s "$old_generated" "$managed_target"
+assert_eq "$old_generated" "$(readlink "$managed_target")"
+assert_eq 'old generation ghostty' "$(cat "$managed_target")"
 backup_inode=$(file_inode "$managed_target.backup")
+run_preflight "$managed_home" \
+  || fail 'collision preflight rejected a managed generation link'
 run_links "$managed_home"
 assert_managed_link "$managed_target"
+[ "$old_generated" != "$(readlink "$managed_target")" ] \
+  || fail 'managed Ghostty link did not move to the new generation'
 assert_eq 'first live ghostty' "$(cat "$managed_target.backup")"
 assert_eq "$backup_inode" "$(file_inode "$managed_target.backup")"
+[ ! -L "$managed_target.backup" ] \
+  || fail 'managed generation update backed up the previous symlink'
 
 # Collision preflight rejects a differing regular file when .backup exists.
 collision_home="$TMP/collision-home"
