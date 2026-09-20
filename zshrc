@@ -54,3 +54,6 @@ export PATH="/etc/profiles/per-user/$USER/bin:/run/current-system/sw/bin:/usr/lo
 
 # Nix Rebuild Shortcut
 alias nix-rebuild="~/.dotfiles/rebuild.sh"
+
+# Open Ghostty's managed config in terminal Vim without changing shell defaults.
+alias ghostty-config='env VISUAL=vim EDITOR=vim /Applications/Ghostty.app/Contents/MacOS/ghostty +edit-config'
