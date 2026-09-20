@@ -41,7 +41,7 @@ Pi from requesting their own cursor styles.
 
 | Setting | Value | Notes |
 | --- | --- | --- |
-| `font-size` | `18` | Matches the current iTerm default-profile Normal Font of 18 points. Ghostty's own default is 13. Manually zoomed terminals can keep their adjusted size after reload; confirm size in a fresh terminal. |
+| `font-size` | `19` | Ghostty's default is 13; six Cmd-+ increments yield 19. Manually zoomed terminals can keep their adjusted size after reload; confirm size in a fresh terminal. |
 | `cursor-style` | `block` | Default prompt cursor. |
 | `cursor-style-blink` | `false` | Steady default. Applications can still use DECSCUSR. |
 | `cursor-color` | `#d1329b` | Same pink as VS Code `editorCursor.foreground` and `terminalCursor.foreground`. |

@@ -39,7 +39,7 @@ while IFS= read -r setting; do
   count=$(printf '%s\n' "$actual_settings" | grep -Fxc -- "$setting")
   assert_eq 1 "$count"
 done <<'EOF'
-font-size = 18
+font-size = 19
 cursor-style = block
 cursor-style-blink = false
 cursor-color = #d1329b
