@@ -38,9 +38,6 @@ init_content=$(nix eval --impure --raw \
 printf '%s\n' "$init_content" | grep -Fqx "$EXPECTED_ALIAS" \
   || fail 'evaluated zsh initContent omitted the ghostty-config alias'
 
-source_alias=$(grep -E '^alias ghostty-config=' "$REPO_ROOT/zshrc")
-assert_eq "$EXPECTED_ALIAS" "$source_alias"
-
 generation=$(nix build --impure --no-link --print-out-paths \
   'path:.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.activationPackage')
 generated_zshrc="$generation/home-files/.zshrc"
