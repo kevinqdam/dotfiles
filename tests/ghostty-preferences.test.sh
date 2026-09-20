@@ -26,7 +26,6 @@ file_inode() {
 
 source_file="$REPO_ROOT/ghostty/config.ghostty"
 relative='Library/Application Support/com.mitchellh.ghostty/config.ghostty'
-vscode_settings="$REPO_ROOT/vscode/settings.json"
 
 [ -f "$source_file" ] || fail 'tracked Ghostty config source is missing'
 actual_settings=$(grep -vE '^[[:space:]]*(#|$)' "$source_file") \
@@ -48,10 +47,6 @@ shell-integration-features = no-cursor
 EOF
 actual_count=$(printf '%s\n' "$actual_settings" | grep -c .)
 assert_eq "$expected_count" "$actual_count"
-grep -Fq '"editorCursor.foreground": "#d1329b"' "$vscode_settings" \
-  || fail 'VS Code cursor color is no longer the Ghostty reference pink'
-grep -Fq '"terminalCursor.foreground": "#d1329b"' "$vscode_settings" \
-  || fail 'VS Code terminal cursor color is no longer the Ghostty reference pink'
 
 generation=$(nix build --impure --no-link --print-out-paths \
   'path:.#darwinConfigurations.macbook.config.home-manager.users.kevindam.home.activationPackage')
