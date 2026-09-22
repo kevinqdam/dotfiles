@@ -90,15 +90,15 @@ jq -e '
   and .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "high"}
   and .rules[0].why == "Astra owns the plan artifact and one bounded finished-output review. Astra does not interview, implement, run tests, or watch CI. Do not omit that review to save quota."
   and .rules[1].when == "mechanical, fully specified edits"
-  and .rules[1].use == {harness: "pi", model: "xai/grok-4.6", effort: "medium"}
+  and .rules[1].use == {harness: "pi", model: "xai/grok-4.7", effort: "medium"}
   and .rules[1].why == "Grok executes mechanical, fully specified edits so scarce Astra is reserved for at most one or two bounded high-reasoning passes."
   and .rules[2].when == "well-scoped implementation"
-  and .rules[2].use == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
+  and .rules[2].use == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
   and .rules[2].why == "Grok executes well-scoped implementation; Astra remains scarce and is not the default implementation model."
   and .rules[3].when == "driving no-mistakes, validation, CI, or any long unattended pipeline"
-  and .rules[3].use == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
+  and .rules[3].use == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
   and .rules[3].why == "Never overnight Astra: unattended no-mistakes must run on Grok after any Astra pass, never as an automatic Astra cadence."
-  and .default == {harness: "pi", model: "xai/grok-4.6", effort: "high"}
+  and .default == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
 ' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved scarce-Astra configuration'
 
 populated="$TMP/populated"
@@ -127,6 +127,51 @@ cmp -s "$TMP/custom-captain.expected" "$custom_dispatch/data/captain.md" \
   || fail 'existing captain memory was rewritten'
 assert_eq 'herdr' "$(cat "$custom_dispatch/config/backend")"
 assert_eq 'pi' "$(cat "$custom_dispatch/config/crew-harness")"
+
+structured_dispatch="$TMP/structured-dispatch"
+mkdir -p "$structured_dispatch/config" "$structured_dispatch/data"
+cat > "$structured_dispatch/config/crew-dispatch.json" <<'EOF'
+{
+  "rules": [
+    {
+      "when": "planning, architecture, diagnosis, design, security, or a bounded review of a plan or already-produced output",
+      "use": {
+        "harness": "pi",
+        "model": "gpt-6-astra",
+        "effort": "high"
+      },
+      "why": "captain-owned Astra wording"
+    },
+    {
+      "when": "mechanical, fully specified edits",
+      "use": {
+        "harness": "pi",
+        "model": "xai/grok-4.7",
+        "effort": "medium"
+      },
+      "why": "existing verified successor, not a seed rewrite"
+    }
+  ],
+  "default": {
+    "harness": "pi",
+    "model": "xai/grok-4.7",
+    "effort": "high",
+    "note": "explicit existing selection"
+  }
+}
+EOF
+printf 'captain runtime\n' > "$structured_dispatch/data/captain.md"
+cp "$structured_dispatch/config/crew-dispatch.json" "$TMP/structured-dispatch.expected"
+cp "$structured_dispatch/data/captain.md" "$TMP/structured-captain.expected"
+"$MATERIALIZER" "$structured_dispatch" >/dev/null
+"$MATERIALIZER" "$structured_dispatch" >/dev/null
+cmp -s "$TMP/structured-dispatch.expected" "$structured_dispatch/config/crew-dispatch.json" \
+  || fail 'existing structured 4.7 dispatch was rewritten'
+cmp -s "$TMP/structured-captain.expected" "$structured_dispatch/data/captain.md" \
+  || fail 'captain memory was rewritten beside structured dispatch'
+jq -e '.default.model == "xai/grok-4.7" and .default.note == "explicit existing selection" and .rules[1].use.effort == "medium"' \
+  "$structured_dispatch/config/crew-dispatch.json" >/dev/null \
+  || fail 'structured 4.7 dispatch was not preserved as existing JSON'
 
 conflict="$TMP/conflict"
 mkdir -p "$conflict/config"

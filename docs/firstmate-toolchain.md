@@ -79,7 +79,7 @@ Home Manager builds the native materializer from `agents/materialize-firstmate-c
 It creates only missing regular files for `config/backend`, `config/crew-harness`, `config/crew-dispatch.json`, and `config/startup-memory-budget`.
 The defaults select Herdr, Pi, the approved Pi model and effort routing, and a 7500-token startup memory budget.
 Astra owns two scarce high-reasoning slots on a ship: the written plan artifact, then one bounded review of finished output. Grok executes everything else.
-Fresh homes route planning, architecture, diagnosis, design, security, or a bounded review of a plan or already-produced output to `gpt-6-astra` at effort `high`; mechanical fully specified edits to `xai/grok-4.6` at effort `medium`; and well-scoped implementation, driving no-mistakes, validation, CI, or any long unattended pipeline, plus the default, to `xai/grok-4.6` at effort `high`.
+Fresh homes route planning, architecture, diagnosis, design, security, or a bounded review of a plan or already-produced output to `gpt-6-astra` at effort `high`; mechanical fully specified edits to `xai/grok-4.7` at effort `medium`; and well-scoped implementation, driving no-mistakes, validation, CI, or any long unattended pipeline, plus the default, to `xai/grok-4.7` at effort `high`.
 Those Astra slots are distinct. Astra does not interview, implement, run tests, or watch CI. Do not omit the output-review slot to save quota.
 Never overnight Astra: unattended no-mistakes must run on Grok after that, never as an automatic Astra cadence.
 The Firstmate dispatcher still gives explicit per-task captain `--harness`, `--model`, and `--effort` requests precedence over these defaults.
@@ -91,6 +91,12 @@ Missing settings are published atomically without replacing a target that appear
 Canonical home and config directories are opened component by component without following symlinks, and all inspection, validation, temporary-file, and publication operations use their held directory descriptors.
 Runtime state, task records, captain memory, backlog, data, project clones, credentials, authentication files, and generated monitoring artifacts are never touched by the activation hook.
 
+A seed model change does not migrate an existing home. Rebuild leaves an existing regular `crew-dispatch.json` byte-for-byte unchanged, including an older concrete model ID or an already selected successor. It does not link, seed, or overwrite captain memory. The global Pi model selection in `~/.pi/agent/settings.json` is unrelated captain-owned runtime state. Activation does not read or replace it, and a Grok seed change is not authority to overwrite it.
+
+Catalog refresh only discovers models. Configured provider catalogs can refresh automatically, and `pi update --models` refreshes them explicitly. Neither rewrites concrete model IDs in Firstmate dispatch, no-mistakes arguments, or Pi settings. A Pi binary upgrade is the separate `./rebuild.sh --upgrade` allowlist path and is not required to publish a seed ID. Package convergence still requires the audited Pi 0.84.3 release, so a blind binary upgrade can fail that guard.
+
+Future same-family successors stay with Firstmate's existing catalog-aware dispatch policy. Verify support through the chosen harness catalog, then select a concrete model ID. This repository adds no resolver, service, guessed latest alias, wildcard, or cron. A passive rebuild does not migrate existing pins. Future source seeds still need a reviewed dotfiles change. Catalog availability is not quota or successful inference.
+
 ## no-mistakes pipeline agent
 
 Home Manager does not symlink `~/.no-mistakes/config.yaml`. Replacing that live file with a generation link would smash daemon state.
@@ -99,12 +105,14 @@ Activation runs `agents/materialize-no-mistakes-config.py` against `~/.no-mistak
 It converges the no-mistakes harness safely:
 
 - `agent: pi`
-- a default `agent_args_override.pi`: `--model xai/grok-4.6 --thinking high` only when the Pi node is absent
+- a default `agent_args_override.pi`: `--model xai/grok-4.7 --thinking high` only when the Pi node is absent
 
-The `agent: pi` key is enforced for test, lint, push, and PR; it is not `auto`, which would hire Codex because Codex is installed. Existing operator-selected Pi arguments, including provider, model, thinking, extra flags, comments, and an explicit empty list, are preserved verbatim. Captain-approved quota fallback may therefore select OpenAI through Pi without becoming a rebuild-time hard pin. Grok Bot.app is not this agent, and the grok CLI is not installed; Grok remains only the initial default.
+The `agent: pi` key is enforced for test, lint, push, and PR; it is not `auto`, which would hire Codex because Codex is installed. Existing operator-selected Pi arguments, including provider, model, thinking, extra flags, comments, and an explicit empty list, are preserved verbatim. An existing Pi node that still names an older model is also preserved. Activation does not string-replace a historical model ID, because that cannot distinguish an explicit pin from a previous seed. Captain-approved quota fallback may therefore select OpenAI through Pi without becoming a rebuild-time hard pin. Grok Bot.app is not this agent, and the grok CLI is not installed; Grok remains only the initial default.
 
 Missing keys receive the default values. Unrelated captain-owned keys such as `ci_timeout` and `auto_fix` stay.
 A symlink, directory, or other non-regular `config.yaml` fails closed instead of replacing live daemon state. Unsupported inline, scalar, or sequence `agent_args_override` containers also fail closed rather than being rewritten.
+
+A one-time edit of a home whose `agent` and `agent_args_override.pi` still match the previous managed Pi/Grok/high default is a separate Firstmate operation, not seed convergence. Re-inspect those fields immediately before editing. If they still match, change only the model ID and preserve effort and unrelated bytes. If the node has diverged, preserve it. Do not edit the shared file while a run is active or while daemon reload behavior is uncertain. A disk edit does not prove the running daemon has loaded the new arguments. Activation must not stop, restart, or update the shared no-mistakes daemon. If a restart is required, Firstmate arranges it only after every lane's current run has finished, then confirms the next safely started run. Leave that activation pending rather than restarting to make validation convenient.
 
 The Astra plan slot and the required single finished-output review slot are distinct Firstmate passes on `gpt-6-astra` at high, at most those two bounded looks.
 Firstmate owns both slots because no-mistakes has no per-step agent today; running review inside no-mistakes would use its configured Pi route or, with `agent: auto`, Codex.
@@ -118,6 +126,8 @@ The bootstrap extension injects Firstmate checkout `AGENTS.md` only when `FM_FIR
 
 The policy applies only to Firstmate coordinator sessions. Ordinary coding sessions, dispatched crewmates and scouts, and no-mistakes step agents ignore it. Workers execute their assigned phase and must not start another cycle.
 
+The same file tells the coordinator to adopt the newest verified generally available successor in the chosen Grok family for unpinned defaults, without a fresh upgrade request, using Firstmate's existing catalog-aware selection policy. It preserves explicit pins, configured roles and efforts, and Luna at max, and it forbids interrupting active sessions or runs. Workers do not apply that rule. The managed text is available after rebuild and a Pi context reload or new session. Do not write through the live `~/.pi/agent/AGENTS.md` link. Prompt-composition tests prove that delivery only. They do not prove model obedience or scheduled automation.
+
 `gsd-discuss`, `gsd-plan`, and `gsd-work` are stage names in that file, not shell commands.
 
 Activation still creates only missing regular Firstmate config files. It does not link, seed, or overwrite `data/captain.md`.
@@ -126,13 +136,13 @@ Activation still creates only missing regular Firstmate config files. It does no
 
 Rebuild preserves existing `~/.local/share/firstmate/config/crew-dispatch.json` byte-for-byte.
 Inspect-then-update only the Astra role wording there so it matches the seed: Astra owns the plan artifact and one bounded finished-output review; Astra does not interview, implement, run tests, or watch CI; do not omit that review to save quota.
-Preserve unrelated captain choices and the existing model/effort values. Never delete the file to force reseeding.
+Preserve unrelated captain choices and the existing model/effort values. Never delete the file to force reseeding. Do not rewrite that file or `data/captain.md` to apply a Grok seed change. Any one-time no-mistakes argument edit is outside rebuild: re-inspect the live node and wait until shared runs are finished.
 
 Separately inspect-then-update `data/captain.md` so the cycle records the accepted prior-authorization exception and points at `agents/pi/AGENTS.md`. Do not commit that private memory, and do not overwrite it through activation.
 
 For a fresh clone, run `cd /path/to/clone && ./rebuild.sh`; the wrapper uses that clone for staging, build, activation, and post-activation setup without requiring `~/.dotfiles`. The existing interactive alias remains `nix-rebuild=~/.dotfiles/rebuild.sh` and intentionally follows the linked repository target. After this change is in the canonical `~/.dotfiles` checkout, `cd ~/.dotfiles && ./rebuild.sh` remains valid. Then reload Pi context or start a fresh session. Do not restart the no-mistakes daemon.
 Verify cold-start delivery with captain memory absent and with stale memory present: the policy supersedes older standing workflow wording, including older unconditional fresh-go captain memory, while preserving current captain instructions and task scope.
-Isolated prompt-composition fixtures and development-only model checks live in `tests/firstmate-policy.test.sh` and `tests/firstmate-policy-model-checks.sh`. They do not replace live-home rebuild and reload.
+Isolated prompt-composition fixtures and development-only model checks live in `tests/firstmate-policy.test.sh` and `tests/firstmate-policy-model-checks.sh`. They do not replace live-home rebuild and reload, and they do not prove model obedience or scheduled automation. The optional check script's default model is the current unpinned Grok seed at medium. `tests/firstmate-policy-model-check-evidence.md` is historical evidence and stays unchanged unless those checks are actually rerun.
 
 `--no-context-files`, `AGENTS.override.md`, and custom Pi agent directories are unsupported delivery surfaces until explicitly covered.
 
