@@ -85,21 +85,24 @@ assert_eq 'pi' "$(cat "$fresh/config/crew-harness")"
 assert_eq '7500' "$(cat "$fresh/config/startup-memory-budget")"
 [ "$(link_count "$fresh/config/startup-memory-budget")" = 1 ] || fail 'default startup memory budget has multiple hard links'
 jq -e '
-  (.rules | length) == 4
-  and .rules[0].when == "planning, architecture, diagnosis, design, security, or a bounded review of a plan or already-produced output"
+  (.rules | length) == 5
+  and .rules[0].when == "explicit captain-selected Astra, or a documented consequential reasoning blocker remaining after a Sol-high pass with a bounded question and why ordinary Sol or narrower evidence cannot settle it"
   and .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "high"}
-  and .rules[0].why == "Astra owns the plan artifact and one bounded finished-output review. Astra does not interview, implement, run tests, or watch CI. Do not omit that review to save quota."
-  and .rules[1].when == "mechanical, fully specified edits"
-  and .rules[1].use == {harness: "pi", model: "xai/grok-4.7", effort: "medium"}
-  and .rules[1].why == "Grok executes mechanical, fully specified edits so scarce Astra is reserved for at most one or two bounded high-reasoning passes."
-  and .rules[2].when == "well-scoped implementation"
-  and .rules[2].use == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
-  and .rules[2].why == "Grok executes well-scoped implementation; Astra remains scarce and is not the default implementation model."
-  and .rules[3].when == "driving no-mistakes, validation, CI, or any long unattended pipeline"
+  and .rules[0].why == "Astra is an exceptional bounded consult only for a documented consequential blocker after Sol high, or an explicit captain choice. Record the blocker, exact decision question, and why another Sol pass or narrower evidence will not settle it. Stage, security label, subjective difficulty, quota, and outage are not exceptions."
+  and .rules[1].when == "planning, architecture, diagnosis, design, security analysis, or a bounded review of a plan or already-produced output, unless the documented exceptional Astra gate is satisfied"
+  and .rules[1].use == {harness: "pi", model: "gpt-6-sol", effort: "high"}
+  and .rules[1].why == "Sol high owns ordinary written plans and bounded reasoning or finished-output reviews. The coordinator must verify the evidence-gated Astra exception before dispatch; these free-text categories are not a deterministic classifier. Captain-selected harness, model, and effort take precedence."
+  and .rules[2].when == "mechanical, fully specified edits"
+  and .rules[2].use == {harness: "pi", model: "xai/grok-4.7", effort: "medium"}
+  and .rules[2].why == "Grok executes mechanical, fully specified edits; the high-reasoning default is Sol, not an automatic Astra reservation."
+  and .rules[3].when == "well-scoped implementation"
   and .rules[3].use == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
-  and .rules[3].why == "Never overnight Astra: unattended no-mistakes must run on Grok after any Astra pass, never as an automatic Astra cadence."
+  and .rules[3].why == "Grok executes well-scoped implementation; Sol owns routine high-reasoning work and Astra is not a default implementation model."
+  and .rules[4].when == "driving no-mistakes, validation, CI, or any long unattended pipeline"
+  and .rules[4].use == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
+  and .rules[4].why == "Grok drives validation and unattended pipelines after the separate Firstmate review; no-mistakes stays on Pi, never auto."
   and .default == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
-' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved scarce-Astra configuration'
+' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved Sol-first configuration'
 
 populated="$TMP/populated"
 mkdir -p "$populated/config" "$populated/data" "$populated/state" "$populated/projects"
@@ -128,50 +131,80 @@ cmp -s "$TMP/custom-captain.expected" "$custom_dispatch/data/captain.md" \
 assert_eq 'herdr' "$(cat "$custom_dispatch/config/backend")"
 assert_eq 'pi' "$(cat "$custom_dispatch/config/crew-harness")"
 
-structured_dispatch="$TMP/structured-dispatch"
-mkdir -p "$structured_dispatch/config" "$structured_dispatch/data"
-cat > "$structured_dispatch/config/crew-dispatch.json" <<'EOF'
+seeded_astra_dispatch="$TMP/seeded-astra-dispatch"
+mkdir -p "$seeded_astra_dispatch/config" "$seeded_astra_dispatch/data"
+cat > "$seeded_astra_dispatch/config/crew-dispatch.json" <<'EOF'
 {
   "rules": [
     {
       "when": "planning, architecture, diagnosis, design, security, or a bounded review of a plan or already-produced output",
-      "use": {
-        "harness": "pi",
-        "model": "gpt-6-astra",
-        "effort": "high"
-      },
-      "why": "captain-owned Astra wording"
+      "use": {"harness": "pi", "model": "gpt-6-astra", "effort": "high"},
+      "why": "Astra owns the plan artifact and one bounded finished-output review. Astra does not interview, implement, run tests, or watch CI. Do not omit that review to save quota."
     },
     {
       "when": "mechanical, fully specified edits",
-      "use": {
-        "harness": "pi",
-        "model": "xai/grok-4.7",
-        "effort": "medium"
-      },
-      "why": "existing verified successor, not a seed rewrite"
+      "use": {"harness": "pi", "model": "xai/grok-4.7", "effort": "medium"},
+      "why": "Grok executes mechanical, fully specified edits so scarce Astra is reserved for at most one or two bounded high-reasoning passes."
+    },
+    {
+      "when": "well-scoped implementation",
+      "use": {"harness": "pi", "model": "xai/grok-4.7", "effort": "high"},
+      "why": "Grok executes well-scoped implementation; Astra remains scarce and is not the default implementation model."
+    },
+    {
+      "when": "driving no-mistakes, validation, CI, or any long unattended pipeline",
+      "use": {"harness": "pi", "model": "xai/grok-4.7", "effort": "high"},
+      "why": "Never overnight Astra: unattended no-mistakes must run on Grok after any Astra pass, never as an automatic Astra cadence."
     }
   ],
-  "default": {
-    "harness": "pi",
-    "model": "xai/grok-4.7",
-    "effort": "high",
-    "note": "explicit existing selection"
-  }
+  "default": {"harness": "pi", "model": "xai/grok-4.7", "effort": "high"}
 }
 EOF
-printf 'captain runtime\n' > "$structured_dispatch/data/captain.md"
-cp "$structured_dispatch/config/crew-dispatch.json" "$TMP/structured-dispatch.expected"
-cp "$structured_dispatch/data/captain.md" "$TMP/structured-captain.expected"
-"$MATERIALIZER" "$structured_dispatch" >/dev/null
-"$MATERIALIZER" "$structured_dispatch" >/dev/null
-cmp -s "$TMP/structured-dispatch.expected" "$structured_dispatch/config/crew-dispatch.json" \
-  || fail 'existing structured 4.7 dispatch was rewritten'
-cmp -s "$TMP/structured-captain.expected" "$structured_dispatch/data/captain.md" \
-  || fail 'captain memory was rewritten beside structured dispatch'
-jq -e '.default.model == "xai/grok-4.7" and .default.note == "explicit existing selection" and .rules[1].use.effort == "medium"' \
-  "$structured_dispatch/config/crew-dispatch.json" >/dev/null \
-  || fail 'structured 4.7 dispatch was not preserved as existing JSON'
+printf 'captain runtime\n' > "$seeded_astra_dispatch/data/captain.md"
+cp "$seeded_astra_dispatch/config/crew-dispatch.json" "$TMP/seeded-astra-dispatch.expected"
+cp "$seeded_astra_dispatch/data/captain.md" "$TMP/seeded-astra-captain.expected"
+"$MATERIALIZER" "$seeded_astra_dispatch" >/dev/null
+"$MATERIALIZER" "$seeded_astra_dispatch" >/dev/null
+cmp -s "$TMP/seeded-astra-dispatch.expected" "$seeded_astra_dispatch/config/crew-dispatch.json" \
+  || fail 'existing seed-shaped Astra dispatch was rewritten'
+cmp -s "$TMP/seeded-astra-captain.expected" "$seeded_astra_dispatch/data/captain.md" \
+  || fail 'captain memory was rewritten beside the seed-shaped dispatch'
+jq -e '
+  .rules[0].when == "planning, architecture, diagnosis, design, security, or a bounded review of a plan or already-produced output"
+  and .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "high"}
+  and .rules[0].why == "Astra owns the plan artifact and one bounded finished-output review. Astra does not interview, implement, run tests, or watch CI. Do not omit that review to save quota."
+  and .rules[1].use == {harness: "pi", model: "xai/grok-4.7", effort: "medium"}
+  and .rules[2].use == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
+  and .rules[3].use == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
+  and .default == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
+' "$seeded_astra_dispatch/config/crew-dispatch.json" >/dev/null \
+  || fail 'existing seed-shaped Astra routing or Grok 4.7 defaults were not preserved'
+
+custom_astra_dispatch="$TMP/custom-astra-dispatch"
+mkdir -p "$custom_astra_dispatch/config"
+cat > "$custom_astra_dispatch/config/crew-dispatch.json" <<'EOF'
+{
+  "rules": [
+    {
+      "when": "captain-selected bounded security review",
+      "use": {"harness": "pi", "model": "gpt-6-astra", "effort": "medium"},
+      "why": "explicit captain model and effort pin"
+    }
+  ],
+  "default": {"harness": "pi", "model": "xai/grok-4.7", "effort": "high", "note": "explicit existing selection"}
+}
+EOF
+cp "$custom_astra_dispatch/config/crew-dispatch.json" "$TMP/custom-astra-dispatch.expected"
+"$MATERIALIZER" "$custom_astra_dispatch" >/dev/null
+"$MATERIALIZER" "$custom_astra_dispatch" >/dev/null
+cmp -s "$TMP/custom-astra-dispatch.expected" "$custom_astra_dispatch/config/crew-dispatch.json" \
+  || fail 'explicit captain Astra model and effort pin were rewritten'
+jq -e '
+  .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "medium"}
+  and .default.model == "xai/grok-4.7"
+  and .default.note == "explicit existing selection"
+' "$custom_astra_dispatch/config/crew-dispatch.json" >/dev/null \
+  || fail 'explicit captain Astra pin or structured Grok 4.7 default was not preserved'
 
 conflict="$TMP/conflict"
 mkdir -p "$conflict/config"

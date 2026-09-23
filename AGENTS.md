@@ -37,7 +37,7 @@ This system is fully declarative and managed by **Nix, Nix-Darwin, Nix-Homebrew,
 
 ### 4. no-mistakes pipeline agent
 Do not Home Manager-link `~/.no-mistakes/config.yaml`; rebuilds enforce the Pi harness and seed model defaults through `agents/materialize-no-mistakes-config.py`, preserving explicit captain-selected Pi routing.
-Firstmate owns the Astra review slot. See `docs/firstmate-toolchain.md`.
+Firstmate routes routine planning and its bounded finished-output review to Sol; Astra is an evidence-gated exception. See `docs/firstmate-toolchain.md`.
 
 ### 5. Pi extensions
 Source Pi extensions in `agents/pi/extensions/` and link them from `home.nix`.
