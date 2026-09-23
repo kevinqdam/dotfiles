@@ -250,6 +250,68 @@ python3 "$MATERIALIZER" "$operator_openai" >/dev/null
 assert_unchanged "$operator_openai/config.yaml" "$operator_snapshot" "$operator_inode" \
   'repeated operator Luna convergence'
 
+operator_luna6_max="$TMP/operator-luna6-max"
+mkdir -p "$operator_luna6_max"
+cat > "$operator_luna6_max/config.yaml" <<'EOF'
+agent: auto # harness is enforced, args remain captain-owned
+ci_timeout: "34h"
+agent_args_override: # preserve the operator's exact Pi route
+  pi: # Luna 6 max pin
+    - --model # provider-qualified catalog ID
+    - 'openai-codex/gpt-6-luna' # verified Pi selector
+    - --thinking
+    - max # explicit max effort
+    - --verbose
+    - "luna six max flag"
+EOF
+python3 "$MATERIALIZER" "$operator_luna6_max" >/dev/null
+luna6_max_json=$(routing_json "$operator_luna6_max/config.yaml")
+assert_pi_agent "$operator_luna6_max/config.yaml"
+assert_eq '["--model","openai-codex/gpt-6-luna","--thinking","max","--verbose","luna six max flag"]' \
+  "$(printf '%s\n' "$luna6_max_json" | jq -c .pi_args)"
+assert_eq '34h' "$(printf '%s\n' "$luna6_max_json" | jq -r .ci_timeout)"
+grep -Fqx '  pi: # Luna 6 max pin' "$operator_luna6_max/config.yaml" \
+  || fail 'Luna 6 max comment was not preserved'
+grep -Fqx "    - 'openai-codex/gpt-6-luna' # verified Pi selector" \
+  "$operator_luna6_max/config.yaml" || fail 'Luna 6 provider-qualified selector comment was not preserved'
+luna6_max_snapshot="$TMP/operator-luna6-max.snapshot"
+cp "$operator_luna6_max/config.yaml" "$luna6_max_snapshot"
+luna6_max_inode=$(inode_of "$operator_luna6_max/config.yaml")
+python3 "$MATERIALIZER" "$operator_luna6_max" >/dev/null
+assert_unchanged "$operator_luna6_max/config.yaml" "$luna6_max_snapshot" "$luna6_max_inode" \
+  'repeated operator Luna 6 max convergence'
+
+operator_luna6_effort="$TMP/operator-luna6-effort"
+mkdir -p "$operator_luna6_effort"
+cat > "$operator_luna6_effort/config.yaml" <<'EOF'
+agent: auto
+log_level: debug
+agent_args_override: # preserve custom args and comments
+  pi: # explicit provider and non-max effort pin
+    - --provider # operator-selected provider
+    - openai-codex
+    - --model
+    - openai-codex/gpt-6-luna
+    - --thinking
+    - low # explicit effort beats fallback max
+    - --verbose
+    - "captain flag"
+EOF
+python3 "$MATERIALIZER" "$operator_luna6_effort" >/dev/null
+luna6_effort_json=$(routing_json "$operator_luna6_effort/config.yaml")
+assert_pi_agent "$operator_luna6_effort/config.yaml"
+assert_eq '["--provider","openai-codex","--model","openai-codex/gpt-6-luna","--thinking","low","--verbose","captain flag"]' \
+  "$(printf '%s\n' "$luna6_effort_json" | jq -c .pi_args)"
+assert_eq 'debug' "$(printf '%s\n' "$luna6_effort_json" | jq -r .log_level)"
+grep -Fqx '    - low # explicit effort beats fallback max' "$operator_luna6_effort/config.yaml" \
+  || fail 'Luna 6 explicit effort comment was not preserved'
+luna6_effort_snapshot="$TMP/operator-luna6-effort.snapshot"
+cp "$operator_luna6_effort/config.yaml" "$luna6_effort_snapshot"
+luna6_effort_inode=$(inode_of "$operator_luna6_effort/config.yaml")
+python3 "$MATERIALIZER" "$operator_luna6_effort" >/dev/null
+assert_unchanged "$operator_luna6_effort/config.yaml" "$luna6_effort_snapshot" "$luna6_effort_inode" \
+  'repeated operator Luna 6 custom effort convergence'
+
 inline_pi="$TMP/inline-pi"
 mkdir -p "$inline_pi"
 cat > "$inline_pi/config.yaml" <<'EOF'

@@ -74,6 +74,15 @@ link_count() {
   fi
 }
 
+inode_of() {
+  path=$1
+  if inode=$(stat -f '%i' "$path" 2>/dev/null); then
+    printf '%s\n' "$inode"
+  else
+    stat -c '%i' "$path"
+  fi
+}
+
 fresh="$TMP/fresh"
 "$MATERIALIZER" "$fresh" >/dev/null
 for name in backend crew-harness crew-dispatch.json startup-memory-budget; do
@@ -205,6 +214,48 @@ jq -e '
   and .default.note == "explicit existing selection"
 ' "$custom_astra_dispatch/config/crew-dispatch.json" >/dev/null \
   || fail 'explicit captain Astra pin or structured Grok 4.7 default was not preserved'
+
+assert_luna_dispatch_pin() {
+  name=$1
+  model=$2
+  effort=$3
+  target_home="$TMP/$name"
+  mkdir -p "$target_home/config"
+  cat > "$target_home/config/crew-dispatch.json" <<EOF
+{
+  "rules": [
+    {
+      "when": "captain-authorized OpenAI fallback pin",
+      "use": {"harness": "pi", "model": "$model", "effort": "$effort"},
+      "why": "Preserve this operator-selected model and effort.",
+      "operator_metadata": {"source": "captain", "keep": true}
+    }
+  ],
+  "default": {"harness": "pi", "model": "xai/grok-4.7", "effort": "high"},
+  "operator_note": "existing homes are not migrated"
+}
+EOF
+  snapshot="$TMP/$name.expected"
+  cp "$target_home/config/crew-dispatch.json" "$snapshot"
+  before_inode=$(inode_of "$target_home/config/crew-dispatch.json")
+  "$MATERIALIZER" "$target_home" >/dev/null
+  "$MATERIALIZER" "$target_home" >/dev/null
+  cmp -s "$snapshot" "$target_home/config/crew-dispatch.json" \
+    || fail "$name existing dispatch bytes were rewritten"
+  [ "$before_inode" = "$(inode_of "$target_home/config/crew-dispatch.json")" ] \
+    || fail "$name existing dispatch inode changed"
+  jq -e --arg model "$model" --arg effort "$effort" '
+    .rules[0].use == {harness: "pi", model: $model, effort: $effort}
+    and .rules[0].operator_metadata == {source: "captain", keep: true}
+    and .default == {harness: "pi", model: "xai/grok-4.7", effort: "high"}
+    and .operator_note == "existing homes are not migrated"
+  ' "$target_home/config/crew-dispatch.json" >/dev/null \
+    || fail "$name explicit pin or unrelated fields were not preserved"
+}
+
+assert_luna_dispatch_pin operator-luna56-dispatch openai-codex/gpt-5.6-luna max
+assert_luna_dispatch_pin operator-luna6-max-dispatch openai-codex/gpt-6-luna max
+assert_luna_dispatch_pin operator-luna6-effort-dispatch openai-codex/gpt-6-luna medium
 
 conflict="$TMP/conflict"
 mkdir -p "$conflict/config"

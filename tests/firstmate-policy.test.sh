@@ -160,13 +160,33 @@ const successor = [
   "Do not guess a latest alias",
   "Keep the current roles and efforts",
   "Preserve explicit pins",
-  "Luna always runs at max",
   "existing catalog-aware dispatch policy",
   "Do not add a resolver, service, cron, or a second selection algorithm",
   "passive rebuild, catalog refresh, or unattended daemon does not migrate existing concrete model IDs",
   "Never interrupt an active session or run",
   "does not prove model obedience or scheduled automation",
 ];
+const fallback = [
+  "Coordinator only. For an OpenAI quota fallback from Grok that the captain has authorized",
+  "prefer the Pi harness with model ID `gpt-6-luna` at effort `max`",
+  "provider-qualified Pi CLI selector: `--model openai-codex/gpt-6-luna --thinking max`",
+  "Verify that the current Pi catalog lists `gpt-6-luna` under provider `openai-codex` and maps thinking level `max` to `max` before dispatch",
+  "catalog availability does not prove quota or successful inference",
+  "not an automatic retry or a new default",
+  "does not replace Grok-first implementation and validation or the Sol/Astra reasoning and review roles",
+  "Explicit captain-selected harness, model, and effort fields each take precedence",
+  "honor every explicit field rather than replacing it with the fallback",
+  "Preserve operator-owned arguments, comments, empty/custom argument lists, and existing homes",
+  "Do not migrate a historical Luna 5.6 or any other concrete model ID",
+  "A source policy update takes effect for new work only after rebuild and Pi context reload or a new session",
+  "Let active work finish",
+  "next safely started, captain-authorized fallback segment",
+  "never by interrupting or rerouting an active session or run",
+];
+assert.ok(
+  !policy.includes("openai-codex/gpt-5.6-luna"),
+  "global Firstmate policy still names Luna 5.6 as a fallback",
+);
 for (const needle of required) {
   assert.ok(absentPrompt.includes(needle), `emitted prompt missing: ${needle}`);
 }
@@ -174,6 +194,12 @@ for (const needle of successor) {
   assert.ok(
     absentPrompt.includes(needle),
     `absent-memory prompt missing successor instruction: ${needle}`,
+  );
+}
+for (const needle of fallback) {
+  assert.ok(
+    absentPrompt.includes(needle),
+    `absent-memory prompt missing OpenAI fallback instruction: ${needle}`,
   );
 }
 
@@ -235,6 +261,12 @@ for (const needle of successor) {
     `stale-memory prompt missing successor instruction: ${needle}`,
   );
 }
+for (const needle of fallback) {
+  assert.ok(
+    stalePrompt.includes(needle),
+    `stale-memory prompt missing OpenAI fallback instruction: ${needle}`,
+  );
+}
 
 const workerFiles = loadProjectContextFiles({ cwd: workerDir, agentDir });
 assert.equal(workerFiles.length, 2, "expected global policy plus worker project context");
@@ -276,7 +308,12 @@ const loaderPrompt = buildSystemPrompt({
 });
 assert.ok(loaderPrompt.includes("Never omit that look to save quota"));
 assert.ok(loaderPrompt.includes("STALE_CAPTAIN_MEMORY_MARKER"));
-assert.ok(loaderPrompt.includes("Luna always runs at max"));
+for (const needle of fallback) {
+  assert.ok(
+    loaderPrompt.includes(needle),
+    `resource-loader prompt missing OpenAI fallback instruction: ${needle}`,
+  );
+}
 assert.ok(
   loaderPrompt.includes("does not prove model obedience or scheduled automation"),
   "loader prompt must not claim these instructions prove obedience or automation",
