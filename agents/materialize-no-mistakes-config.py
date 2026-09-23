@@ -16,7 +16,7 @@ CONFIG_NAME = "config.yaml"
 MAX_BYTES = 1_048_576
 STUB = """\
 # Pipeline execution defaults to Pi with Grok; explicit captain model choices
-# are preserved. High-reasoning review is a separate Firstmate Astra pass.
+# are preserved. Sol handles routine Firstmate review; Astra is exception-only.
 agent: pi
 agent_args_override:
   pi:

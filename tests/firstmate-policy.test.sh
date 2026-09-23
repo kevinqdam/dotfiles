@@ -117,23 +117,31 @@ const required = [
   "goals, users, expectations, non-goals, constraints, risks, and acceptance evidence",
   "scaled to ambiguity",
   "Reuse answers already supplied",
-  "Astra high owns the written plan artifact",
+  "Sol high owns ordinary reasoning (including architecture, diagnosis, design, and security analysis), the written plan artifact, and bounded reviews of plans",
+  "Use Astra high only when a specific consequential reasoning blocker remains unresolved after a bounded Sol-high pass, or when the captain explicitly selects Astra",
+  "the exact decision question",
+  "why another normal Sol pass or narrower evidence gathering cannot settle it",
+  "An important-sounding label, broad architecture or security category, subjective difficulty, ordinary review, plan stage, quota/cost concern, or Sol outage is not by itself an exception",
+  "Gather missing evidence or stay with Sol rather than silently switching",
   "Wait for go before `gsd-work` unless the captain already authorized implementation of that same outcome",
   "Record the actual authorization",
   "Plan-only remains plan-only",
   "Enter `gsd-plan` now",
   "Do not wait for implementation go: a plan-only request has no implementation step",
-  "Grok implements, tests, lints, and drives no-mistakes/CI",
-  "Grok resolves findings",
-  "one bounded Astra-high review of finished output",
+  "Grok implements, tests, lints, resolves review findings, and drives no-mistakes/CI",
+  "one bounded Sol-high review of finished output",
+  "records the reviewed revision and findings",
+  "The same evidence-gated Astra exception applies to this review",
+  "the review stage alone is not grounds for Astra",
   "Never omit that look to save quota",
   "skip no-mistakes's `review` step, not validation",
   "no-mistakes agent as Pi, never `auto`",
-  "Grok high: implementation, tests, lint, no-mistakes, and CI",
+  "Sol high: ordinary reasoning, written plans, bounded plan reviews, and one bounded finished-output review per ship",
+  "Astra high: one bounded consult only for the documented consequential blocker after Sol",
   "Model and effort are defaults, not pins",
-  "explicit captain-selected model and effort requests take precedence",
-  "including an OpenAI quota fallback through Pi",
-  "No automatic second Astra loop",
+  "explicit captain-selected harness, model, and effort requests take precedence",
+  "including Astra or a Pi-based OpenAI quota fallback",
+  "No automatic second Sol or Astra loop",
   "not implicit merge permission",
   "execute the assigned phase only",
   "stage names, not shell commands",
@@ -194,6 +202,21 @@ assert.match(staleFiles[1].content, /wait for explicit implementation authorizat
 const stalePrompt = emit(staleDir, staleFiles);
 assert.match(stalePrompt, /STALE_CAPTAIN_MEMORY_MARKER/);
 assert.match(stalePrompt, /wait for explicit implementation authorization/);
+const currentSolPolicy =
+  "Sol high owns ordinary reasoning (including architecture, diagnosis, design, and security analysis), the written plan artifact, and bounded reviews of plans";
+assert.ok(
+  stalePrompt.includes(currentSolPolicy),
+  "stale-memory prompt lost the current Sol-first policy",
+);
+assert.ok(
+  !policy.includes("Astra high produces the plan artifact"),
+  "current coordinator policy still assigns plans to Astra",
+);
+assert.ok(
+  stalePrompt.indexOf(currentSolPolicy) <
+    stalePrompt.indexOf("Plan: Astra high produces the plan artifact"),
+  "stale Astra memory appeared ahead of the current Sol-first policy",
+);
 assert.ok(
   stalePrompt.includes("older captain-memory wording that always waits for a fresh explicit implementation go"),
   "stale-memory prompt missing supersession of unconditional fresh-go wording",

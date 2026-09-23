@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Development-only Grok checks for Firstmate coordinator policy.
 # Not deterministic and not a CI gate. Observed decisions are not model obedience.
+# Routing cases only ask Grok to recommend a route; this script never invokes
+# the selected route model, including Astra.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -38,9 +40,10 @@ for name in absent stale worker; do
 done
 
 FORMAT=$'Answer with exactly these fields, then stop. Do not use tools.\nSTAGE: gsd-discuss | gsd-plan | gsd-work | assigned-phase | ask-cycle\nWAIT_FOR_GO: yes | no | n/a\nASK_WHETHER_TO_USE_CYCLE: yes | no\nAUTHORITY_RECORDED: yes | no | n/a\nRATIONALE: one sentence'
+ROUTE_FORMAT=$'Recommend only the Firstmate route; do not invoke or hand off to it. Answer with exactly these fields, then stop. Do not use tools.\nSELECTED_MODEL: gpt-6-sol | gpt-6-astra | xai/grok-4.7 | defer\nSELECTED_EFFORT: high | medium | defer\nRATIONALE: one sentence'
 
 run_case() {
-  local name=$1 active=$2 project=$3 prompt=$4
+  local name=$1 active=$2 project=$3 prompt=$4 format=${5:-$FORMAT}
   local out="$TMP/$name.out"
   local env_active=()
   if [ "$active" = 1 ]; then
@@ -55,7 +58,7 @@ run_case() {
       PI_SKIP_VERSION_CHECK=1 \
       "$PI_HOMEBREW" -p --approve --no-session --no-extensions --no-skills --no-tools \
         --model "$MODEL" --thinking "$EFFORT" \
-        -- "$prompt"$'\n\n'"$FORMAT"
+        -- "$prompt"$'\n\n'"$format"
   ) >"$out" 2>"$TMP/$name.err" || fail "pi failed for $name (see $TMP/$name.err)"
   printf '%s' "$out"
 }
@@ -149,5 +152,53 @@ observe ambiguous-stale \
   'Captain: we should make onboarding better. Stale captain memory in the digest prefers a discuss-plan-work cycle. Decide the next Firstmate stage only. Do not ask the captain whether to use the cycle.' \
   gsd-discuss n/a no n/a
 
+route_observe() {
+  local name=$1 title=$2 prompt=$3 expected_model=$4 expected_effort=$5
+  local out selected_model selected_effort rationale
+  out=$(run_case "$name" 1 absent "$prompt" "$ROUTE_FORMAT")
+  selected_model=$(extract "$out" SELECTED_MODEL)
+  selected_effort=$(extract "$out" SELECTED_EFFORT)
+  rationale=$(extract "$out" RATIONALE)
+  [ -n "$selected_model" ] || fail "$name: missing SELECTED_MODEL in model output"
+  [ -n "$selected_effort" ] || fail "$name: missing SELECTED_EFFORT in model output"
+  {
+    printf '## Route: %s\n\n' "$title"
+    printf -- '- Input: `%s`\n' "$prompt"
+    printf -- '- Observed recommendation: model=`%s` effort=`%s`\n' \
+      "$selected_model" "$selected_effort"
+    printf -- '- Expected recommendation: model=`%s` effort=`%s`\n' \
+      "$expected_model" "$expected_effort"
+    printf -- '- Rationale: %s\n\n' "${rationale:-none}"
+  } >>"$EVIDENCE"
+  printf '%s\t%s\t%s\t%s\t%s\n' \
+    "$name" "$selected_model" "$expected_model" "$selected_effort" "$expected_effort"
+}
+
 printf '\nThese checks are development observations, not a proof of model obedience.\n' >>"$EVIDENCE"
-printf 'ok - wrote %s\n' "$EVIDENCE"
+printf '\nRouting outputs are recommendations only; no selected model is invoked.\n' >>"$EVIDENCE"
+printf 'route_case\tobserved_model\texpected_model\tobserved_effort\texpected_effort\n'
+route_observe routine-plan \
+  'Routine plan uses Sol high' \
+  'Coordinator task: write an ordinary implementation plan for a non-safety-critical settings export feature. There is no prior Sol blocker. Select the default model and effort.' \
+  gpt-6-sol high
+route_observe finished-output-review \
+  'Routine finished-output review uses Sol high' \
+  'Coordinator task: perform the one bounded review of a finished feature revision. No prior Sol review occurred and no specific consequential blocker is known. Select the default model and effort.' \
+  gpt-6-sol high
+route_observe routine-security-analysis \
+  'Routine security analysis is not an Astra exception' \
+  'Coordinator task: analyze the ordinary security properties of a settings export endpoint. No Sol pass has found an unresolved consequential blocker. Security analysis is explicitly routine. Select the default model and effort.' \
+  gpt-6-sol high
+route_observe documented-sol-blocker \
+  'Documented consequential blocker may receive a bounded Astra consult' \
+  'Coordinator task: Sol high completed a bounded analysis and returned contradictory conclusions about whether an authentication invariant can be bypassed. Narrower evidence gathering was completed and did not resolve the contradiction. Record the exact decision question: is the bypass possible under invariant X? Select one bounded reasoning consult and effort.' \
+  gpt-6-astra high
+route_observe captain-astra-effort-override \
+  'Explicit captain Astra and effort selection overrides the default' \
+  'Captain explicitly selects model gpt-6-astra and effort medium for this ordinary plan. This is an explicit override, not a blocker escalation. Select the captain-requested model and effort.' \
+  gpt-6-astra medium
+route_observe worker-no-recursion \
+  'Worker executes its assignment without coordinator routing' \
+  'You are a dispatched crewmate asked to implement a fully specified edit. Execute only the assigned phase; do not start a Firstmate cycle or select a coordinator model.' \
+  defer defer
+printf '\nok - wrote optional observations to %s\n' "$EVIDENCE"
