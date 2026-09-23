@@ -143,8 +143,30 @@ const required = [
   "do not wait for another go",
   "Stale captain memory that requires a fresh go even after that authorization is superseded here",
 ];
+const successor = [
+  "Coordinator only",
+  "do not apply this rule",
+  "newest verified generally available successor in the chosen Grok family",
+  "without a fresh upgrade request",
+  "chosen harness catalog",
+  "Do not guess a latest alias",
+  "Keep the current roles and efforts",
+  "Preserve explicit pins",
+  "Luna always runs at max",
+  "existing catalog-aware dispatch policy",
+  "Do not add a resolver, service, cron, or a second selection algorithm",
+  "passive rebuild, catalog refresh, or unattended daemon does not migrate existing concrete model IDs",
+  "Never interrupt an active session or run",
+  "does not prove model obedience or scheduled automation",
+];
 for (const needle of required) {
   assert.ok(absentPrompt.includes(needle), `emitted prompt missing: ${needle}`);
+}
+for (const needle of successor) {
+  assert.ok(
+    absentPrompt.includes(needle),
+    `absent-memory prompt missing successor instruction: ${needle}`,
+  );
 }
 
 assert.ok(
@@ -184,6 +206,12 @@ assert.ok(
   stalePrompt.includes("Current captain instructions and the current task's assigned scope still win for that task"),
   "stale-memory prompt dropped current captain-instruction precedence",
 );
+for (const needle of successor) {
+  assert.ok(
+    stalePrompt.includes(needle),
+    `stale-memory prompt missing successor instruction: ${needle}`,
+  );
+}
 
 const workerFiles = loadProjectContextFiles({ cwd: workerDir, agentDir });
 assert.equal(workerFiles.length, 2, "expected global policy plus worker project context");
@@ -191,6 +219,8 @@ const workerPrompt = emit(workerDir, workerFiles);
 assert.match(workerPrompt, /FIRSTMATE_WORKER_CONTEXT_MARKER/);
 assert.ok(workerPrompt.includes("Do not start another discuss-plan-work cycle"));
 assert.ok(workerPrompt.includes("execute the assigned phase only"));
+assert.ok(workerPrompt.includes("Workers, scouts, and no-mistakes step agents do not apply this rule"));
+assert.ok(workerPrompt.includes("do not start a successor migration"));
 
 const disabledLoader = new DefaultResourceLoader({
   cwd: absentDir,
@@ -223,6 +253,11 @@ const loaderPrompt = buildSystemPrompt({
 });
 assert.ok(loaderPrompt.includes("Never omit that look to save quota"));
 assert.ok(loaderPrompt.includes("STALE_CAPTAIN_MEMORY_MARKER"));
+assert.ok(loaderPrompt.includes("Luna always runs at max"));
+assert.ok(
+  loaderPrompt.includes("does not prove model obedience or scheduled automation"),
+  "loader prompt must not claim these instructions prove obedience or automation",
+);
 
 const overrideDir = join(tmpDir, "override-agent");
 mkdirSync(overrideDir, { recursive: true });

@@ -11,7 +11,7 @@ import stat
 import sys
 
 APPROVED_AGENT = "pi"
-DEFAULT_PI_ARGS = ("--model", "xai/grok-4.6", "--thinking", "high")
+DEFAULT_PI_ARGS = ("--model", "xai/grok-4.7", "--thinking", "high")
 CONFIG_NAME = "config.yaml"
 MAX_BYTES = 1_048_576
 STUB = """\
@@ -21,7 +21,7 @@ agent: pi
 agent_args_override:
   pi:
     - --model
-    - xai/grok-4.6
+    - xai/grok-4.7
     - --thinking
     - high
 """

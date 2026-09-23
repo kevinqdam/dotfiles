@@ -100,7 +100,7 @@ assert_default_routing() {
   file=$1
   json=$(routing_json "$file")
   assert_pi_agent "$file"
-  assert_eq '["--model","xai/grok-4.6","--thinking","high"]' \
+  assert_eq '["--model","xai/grok-4.7","--thinking","high"]' \
     "$(printf '%s\n' "$json" | jq -c .pi_args)"
 }
 
@@ -319,6 +319,53 @@ python3 "$MATERIALIZER" "$explicit_empty" >/dev/null
 empty_json=$(routing_json "$explicit_empty/config.yaml")
 assert_pi_agent "$explicit_empty/config.yaml"
 assert_eq '[]' "$(printf '%s\n' "$empty_json" | jq -c .pi_args)"
+
+historical_grok="$TMP/historical-grok"
+mkdir -p "$historical_grok"
+cat > "$historical_grok/config.yaml" <<'EOF'
+# explicit historical Grok node must not be migrated
+agent: pi
+agent_args_override:
+  pi: # custom 4.6 pin
+    - --model
+    - xai/grok-4.6
+    - --thinking
+    - high
+    - --verbose
+EOF
+historical_snapshot="$TMP/historical-grok.snapshot"
+cp "$historical_grok/config.yaml" "$historical_snapshot"
+historical_inode=$(inode_of "$historical_grok/config.yaml")
+python3 "$MATERIALIZER" "$historical_grok" >/dev/null
+assert_unchanged "$historical_grok/config.yaml" "$historical_snapshot" "$historical_inode" \
+  'existing 4.6 custom Pi node'
+historical_json=$(routing_json "$historical_grok/config.yaml")
+assert_eq '["--model","xai/grok-4.6","--thinking","high","--verbose"]' \
+  "$(printf '%s\n' "$historical_json" | jq -c .pi_args)"
+if grep -Fq 'xai/grok-4.7' "$historical_grok/config.yaml"; then
+  fail 'existing 4.6 custom Pi node was migrated to 4.7'
+fi
+
+exact_historical="$TMP/exact-historical-grok"
+mkdir -p "$exact_historical"
+cat > "$exact_historical/config.yaml" <<'EOF'
+agent: pi
+agent_args_override:
+  pi:
+    - --model
+    - xai/grok-4.6
+    - --thinking
+    - high
+EOF
+exact_snapshot="$TMP/exact-historical-grok.snapshot"
+cp "$exact_historical/config.yaml" "$exact_snapshot"
+exact_inode=$(inode_of "$exact_historical/config.yaml")
+python3 "$MATERIALIZER" "$exact_historical" >/dev/null
+assert_unchanged "$exact_historical/config.yaml" "$exact_snapshot" "$exact_inode" \
+  'existing 4.6 seed-shaped Pi node'
+if grep -Fq 'xai/grok-4.7' "$exact_historical/config.yaml"; then
+  fail 'existing 4.6 seed-shaped Pi node was migrated to 4.7'
+fi
 
 assert_unsupported_override() {
   name=$1
