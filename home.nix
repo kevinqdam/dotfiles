@@ -113,6 +113,10 @@ in {
   home.file."${vscodeUserDirectory}/settings.json".source = ./vscode/settings.json;
   home.file."${vscodeUserDirectory}/keybindings.json".source = ./vscode/keybindings.json;
 
+  # Ghostty is installed by the Homebrew cask; keep its macOS config in the
+  # same Home Manager-linked profile as the other declarative settings.
+  home.file."Library/Application Support/com.mitchellh.ghostty/config.ghostty".source = ./ghostty/config.ghostty;
+
   # The VS Code cask does not install extensions. Ensure every audited
   # extension ID is present without updating or removing other extensions.
   home.activation.vscodeExtensions = lib.hm.dag.entryAfter [ "linkGeneration" ] ''

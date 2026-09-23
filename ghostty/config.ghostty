@@ -1,0 +1,9 @@
+# Ghostty default 13 plus six Cmd-+ increments.
+font-size = 19
+cursor-style = block
+cursor-style-blink = false
+# Same pink as VS Code editorCursor.foreground and terminalCursor.foreground.
+cursor-color = #d1329b
+# Keep prompt integration from replacing the block with a bar.
+# Applications may still request their own cursor styles.
+shell-integration-features = no-cursor
