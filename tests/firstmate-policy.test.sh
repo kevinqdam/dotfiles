@@ -177,8 +177,8 @@ const execution = [
   "The fresh execution default is Pi `openai-codex/gpt-6-luna` at `max`",
 ];
 assert.ok(
-  !policy.includes("OpenAI quota fallback"),
-  "global Firstmate policy still describes Luna as fallback-only",
+  !absentPrompt.includes("OpenAI quota fallback"),
+  "emitted Firstmate prompt still describes Luna as fallback-only",
 );
 for (const needle of required) {
   assert.ok(absentPrompt.includes(needle), `emitted prompt missing: ${needle}`);
@@ -228,8 +228,8 @@ assert.ok(
   "stale-memory prompt lost the current Sol-first policy",
 );
 assert.ok(
-  !policy.includes("Astra high produces the plan artifact"),
-  "current coordinator policy still assigns plans to Astra",
+  !absentPrompt.includes("Astra high produces the plan artifact"),
+  "emitted current coordinator prompt still assigns plans to Astra",
 );
 assert.ok(
   stalePrompt.indexOf(currentSolPolicy) <

@@ -79,11 +79,11 @@ parent=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD)
 {
   printf '# Firstmate policy development model checks\n\n'
   printf 'Not a deterministic test. These observations do not prove universal model obedience.\n\n'
-  printf -- '- Parent revision: `%s`\n' "$parent"
-  printf -- '- Model: `%s`\n' "$MODEL"
-  printf -- '- Effort: `%s`\n' "$EFFORT"
-  printf -- '- Isolated `PI_CODING_AGENT_DIR` with `agents/pi/AGENTS.md` plus a symlink to live `auth.json` (read credentials only).\n'
-  printf -- '- Project fixtures: `tests/fixtures/firstmate-policy/{absent,stale,worker}`.\n'
+  printf -- "- Parent revision: \`%s\`\n" "$parent"
+  printf -- "- Model: \`%s\`\n" "$MODEL"
+  printf -- "- Effort: \`%s\`\n" "$EFFORT"
+  printf '%s\n' "- Isolated \`PI_CODING_AGENT_DIR\` with \`agents/pi/AGENTS.md\` plus a symlink to live \`auth.json\` (read credentials only)."
+  printf '%s\n' "- Project fixtures: \`tests/fixtures/firstmate-policy/{absent,stale,worker}\`."
   printf -- '- No live captain-memory overwrite, no activation, no rebuild, no Codex.\n\n'
 } >"$EVIDENCE"
 
@@ -100,13 +100,13 @@ observe() {
   [ -n "$stage" ] || fail "$name: missing STAGE in model output"
   {
     printf '## %s\n\n' "$title"
-    printf -- '- Case: `%s`\n' "$name"
-    printf -- '- Coordinator active: `%s`\n' "$active"
-    printf -- '- Fixture: `%s`\n' "$project"
-    printf -- '- Input:\n\n```\n%s\n```\n\n' "$prompt"
-    printf -- '- Observed: STAGE=`%s` WAIT_FOR_GO=`%s` ASK_WHETHER_TO_USE_CYCLE=`%s` AUTHORITY_RECORDED=`%s`\n' \
+    printf -- "- Case: \`%s\`\n" "$name"
+    printf -- "- Coordinator active: \`%s\`\n" "$active"
+    printf -- "- Fixture: \`%s\`\n" "$project"
+    printf -- "- Input:\n\n\`\`\`\n%s\n\`\`\`\n\n" "$prompt"
+    printf -- "- Observed: STAGE=\`%s\` WAIT_FOR_GO=\`%s\` ASK_WHETHER_TO_USE_CYCLE=\`%s\` AUTHORITY_RECORDED=\`%s\`\n" \
       "$stage" "$wait" "$ask" "$auth"
-    printf -- '- Expected: STAGE=`%s` WAIT_FOR_GO=`%s` ASK_WHETHER_TO_USE_CYCLE=`%s` AUTHORITY_RECORDED=`%s`\n' \
+    printf -- "- Expected: STAGE=\`%s\` WAIT_FOR_GO=\`%s\` ASK_WHETHER_TO_USE_CYCLE=\`%s\` AUTHORITY_RECORDED=\`%s\`\n" \
       "$expected_stage" "$expected_wait" "$expected_ask" "$expected_auth"
     printf -- '- Rationale: %s\n\n' "${rationale:-"(none)"}"
   } >>"$EVIDENCE"
@@ -163,10 +163,10 @@ route_observe() {
   [ -n "$selected_effort" ] || fail "$name: missing SELECTED_EFFORT in model output"
   {
     printf '## Route: %s\n\n' "$title"
-    printf -- '- Input: `%s`\n' "$prompt"
-    printf -- '- Observed recommendation: model=`%s` effort=`%s`\n' \
+    printf -- "- Input: \`%s\`\n" "$prompt"
+    printf -- "- Observed recommendation: model=\`%s\` effort=\`%s\`\n" \
       "$selected_model" "$selected_effort"
-    printf -- '- Expected recommendation: model=`%s` effort=`%s`\n' \
+    printf -- "- Expected recommendation: model=\`%s\` effort=\`%s\`\n" \
       "$expected_model" "$expected_effort"
     printf -- '- Rationale: %s\n\n' "${rationale:-none}"
   } >>"$EVIDENCE"
