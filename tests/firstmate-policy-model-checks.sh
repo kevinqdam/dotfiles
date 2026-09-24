@@ -40,7 +40,7 @@ for name in absent stale worker; do
 done
 
 FORMAT=$'Answer with exactly these fields, then stop. Do not use tools.\nSTAGE: gsd-discuss | gsd-plan | gsd-work | assigned-phase | ask-cycle\nWAIT_FOR_GO: yes | no | n/a\nASK_WHETHER_TO_USE_CYCLE: yes | no\nAUTHORITY_RECORDED: yes | no | n/a\nRATIONALE: one sentence'
-ROUTE_FORMAT=$'Recommend only the Firstmate route; do not invoke or hand off to it. Answer with exactly these fields, then stop. Do not use tools.\nSELECTED_MODEL: gpt-6-sol | gpt-6-astra | xai/grok-4.7 | defer\nSELECTED_EFFORT: high | medium | defer\nRATIONALE: one sentence'
+ROUTE_FORMAT=$'Recommend only the Firstmate route; do not invoke or hand off to it. Answer with exactly these fields, then stop. Do not use tools.\nSELECTED_MODEL: openai-codex/gpt-6-luna | gpt-6-sol | gpt-6-astra | xai/grok-4.7 | defer\nSELECTED_EFFORT: max | high | medium | defer\nRATIONALE: one sentence'
 
 run_case() {
   local name=$1 active=$2 project=$3 prompt=$4 format=${5:-$FORMAT}
@@ -79,11 +79,11 @@ parent=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD)
 {
   printf '# Firstmate policy development model checks\n\n'
   printf 'Not a deterministic test. These observations do not prove universal model obedience.\n\n'
-  printf -- '- Parent revision: `%s`\n' "$parent"
-  printf -- '- Model: `%s`\n' "$MODEL"
-  printf -- '- Effort: `%s`\n' "$EFFORT"
-  printf -- '- Isolated `PI_CODING_AGENT_DIR` with `agents/pi/AGENTS.md` plus a symlink to live `auth.json` (read credentials only).\n'
-  printf -- '- Project fixtures: `tests/fixtures/firstmate-policy/{absent,stale,worker}`.\n'
+  printf -- "- Parent revision: \`%s\`\n" "$parent"
+  printf -- "- Model: \`%s\`\n" "$MODEL"
+  printf -- "- Effort: \`%s\`\n" "$EFFORT"
+  printf '%s\n' "- Isolated \`PI_CODING_AGENT_DIR\` with \`agents/pi/AGENTS.md\` plus a symlink to live \`auth.json\` (read credentials only)."
+  printf '%s\n' "- Project fixtures: \`tests/fixtures/firstmate-policy/{absent,stale,worker}\`."
   printf -- '- No live captain-memory overwrite, no activation, no rebuild, no Codex.\n\n'
 } >"$EVIDENCE"
 
@@ -100,13 +100,13 @@ observe() {
   [ -n "$stage" ] || fail "$name: missing STAGE in model output"
   {
     printf '## %s\n\n' "$title"
-    printf -- '- Case: `%s`\n' "$name"
-    printf -- '- Coordinator active: `%s`\n' "$active"
-    printf -- '- Fixture: `%s`\n' "$project"
-    printf -- '- Input:\n\n```\n%s\n```\n\n' "$prompt"
-    printf -- '- Observed: STAGE=`%s` WAIT_FOR_GO=`%s` ASK_WHETHER_TO_USE_CYCLE=`%s` AUTHORITY_RECORDED=`%s`\n' \
+    printf -- "- Case: \`%s\`\n" "$name"
+    printf -- "- Coordinator active: \`%s\`\n" "$active"
+    printf -- "- Fixture: \`%s\`\n" "$project"
+    printf -- "- Input:\n\n\`\`\`\n%s\n\`\`\`\n\n" "$prompt"
+    printf -- "- Observed: STAGE=\`%s\` WAIT_FOR_GO=\`%s\` ASK_WHETHER_TO_USE_CYCLE=\`%s\` AUTHORITY_RECORDED=\`%s\`\n" \
       "$stage" "$wait" "$ask" "$auth"
-    printf -- '- Expected: STAGE=`%s` WAIT_FOR_GO=`%s` ASK_WHETHER_TO_USE_CYCLE=`%s` AUTHORITY_RECORDED=`%s`\n' \
+    printf -- "- Expected: STAGE=\`%s\` WAIT_FOR_GO=\`%s\` ASK_WHETHER_TO_USE_CYCLE=\`%s\` AUTHORITY_RECORDED=\`%s\`\n" \
       "$expected_stage" "$expected_wait" "$expected_ask" "$expected_auth"
     printf -- '- Rationale: %s\n\n' "${rationale:-"(none)"}"
   } >>"$EVIDENCE"
@@ -163,10 +163,10 @@ route_observe() {
   [ -n "$selected_effort" ] || fail "$name: missing SELECTED_EFFORT in model output"
   {
     printf '## Route: %s\n\n' "$title"
-    printf -- '- Input: `%s`\n' "$prompt"
-    printf -- '- Observed recommendation: model=`%s` effort=`%s`\n' \
+    printf -- "- Input: \`%s\`\n" "$prompt"
+    printf -- "- Observed recommendation: model=\`%s\` effort=\`%s\`\n" \
       "$selected_model" "$selected_effort"
-    printf -- '- Expected recommendation: model=`%s` effort=`%s`\n' \
+    printf -- "- Expected recommendation: model=\`%s\` effort=\`%s\`\n" \
       "$expected_model" "$expected_effort"
     printf -- '- Rationale: %s\n\n' "${rationale:-none}"
   } >>"$EVIDENCE"
@@ -185,6 +185,22 @@ route_observe finished-output-review \
   'Routine finished-output review uses Sol high' \
   'Coordinator task: perform the one bounded review of a finished feature revision. No prior Sol review occurred and no specific consequential blocker is known. Select the default model and effort.' \
   gpt-6-sol high
+route_observe mechanical-edits \
+  'Mechanical fully specified edits use standing Luna max execution' \
+  'Coordinator task: apply these exact mechanical edits to the requested config. The scope and acceptance criteria are fully specified. Select the default execution model and effort.' \
+  openai-codex/gpt-6-luna max
+route_observe well-scoped-implementation \
+  'Well-scoped implementation uses standing Luna max execution' \
+  'Coordinator task: implement a small, fully scoped feature with explicit acceptance criteria. Select the default execution model and effort.' \
+  openai-codex/gpt-6-luna max
+route_observe no-mistakes-pipeline \
+  'No-mistakes, validation, and unattended execution use Luna max' \
+  'Coordinator task: after the separate Sol-high finished-output review, drive no-mistakes validation and CI, including an unattended pipeline. Select the default execution model and effort.' \
+  openai-codex/gpt-6-luna max
+route_observe execution-default \
+  'Unpinned fresh execution defaults to Luna max' \
+  'Coordinator task: choose the unpinned execution default for a new Firstmate home. Select the default model and effort.' \
+  openai-codex/gpt-6-luna max
 route_observe routine-security-analysis \
   'Routine security analysis is not an Astra exception' \
   'Coordinator task: analyze the ordinary security properties of a settings export endpoint. No Sol pass has found an unresolved consequential blocker. Security analysis is explicitly routine. Select the default model and effort.' \
@@ -197,6 +213,10 @@ route_observe captain-astra-effort-override \
   'Explicit captain Astra and effort selection overrides the default' \
   'Captain explicitly selects model gpt-6-astra and effort medium for this ordinary plan. This is an explicit override, not a blocker escalation. Select the captain-requested model and effort.' \
   gpt-6-astra medium
+route_observe captain-luna-effort-override \
+  'Captain-selected Luna effort overrides the max execution default' \
+  'Captain explicitly selects model openai-codex/gpt-6-luna and effort medium for this implementation. This is an explicit effort override. Select the captain-requested model and effort.' \
+  openai-codex/gpt-6-luna medium
 route_observe worker-no-recursion \
   'Worker executes its assignment without coordinator routing' \
   'You are a dispatched crewmate asked to implement a fully specified edit. Execute only the assigned phase; do not start a Firstmate cycle or select a coordinator model.' \

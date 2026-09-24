@@ -128,7 +128,8 @@ const required = [
   "Plan-only remains plan-only",
   "Enter `gsd-plan` now",
   "Do not wait for implementation go: a plan-only request has no implementation step",
-  "Grok implements, tests, lints, resolves review findings, and drives no-mistakes/CI",
+  "Luna max implements, tests, lints, resolves review findings, and drives no-mistakes/CI",
+  "The standing fresh execution route and unpinned default are Pi `openai-codex/gpt-6-luna` at `max`.",
   "one bounded Sol-high review of finished output",
   "records the reviewed revision and findings",
   "The same evidence-gated Astra exception applies to this review",
@@ -140,7 +141,7 @@ const required = [
   "Astra high: one bounded consult only for the documented consequential blocker after Sol",
   "Model and effort are defaults, not pins",
   "explicit captain-selected harness, model, and effort requests take precedence",
-  "including Astra or a Pi-based OpenAI quota fallback",
+  "honor that choice, including Astra.",
   "No automatic second Sol or Astra loop",
   "not implicit merge permission",
   "execute the assigned phase only",
@@ -159,14 +160,26 @@ const successor = [
   "chosen harness catalog",
   "Do not guess a latest alias",
   "Keep the current roles and efforts",
-  "Preserve explicit pins",
-  "Luna always runs at max",
+  "This successor rule applies only to the coordinator's Grok-medium role; it does not change the standing Luna execution route",
+  "A successor changes only an unpinned Grok coordinator model ID",
   "existing catalog-aware dispatch policy",
   "Do not add a resolver, service, cron, or a second selection algorithm",
-  "passive rebuild, catalog refresh, or unattended daemon does not migrate existing concrete model IDs",
+  "A passive rebuild, catalog refresh, or unattended daemon does not migrate existing concrete model IDs or restart active work",
   "Never interrupt an active session or run",
   "does not prove model obedience or scheduled automation",
 ];
+const execution = [
+  "Luna max implements, tests, lints, resolves review findings, and drives no-mistakes/CI",
+  "standing fresh execution route and unpinned default are Pi `openai-codex/gpt-6-luna` at `max`",
+  "Explicit captain-selected harness, model, and effort take precedence",
+  "Luna max: mechanical and well-scoped implementation, tests, lint, no-mistakes, validation, CI, and unattended execution",
+  "Preserve captain-selected harness, model, and effort pins, existing custom argument nodes, comments, and empty argument lists",
+  "The fresh execution default is Pi `openai-codex/gpt-6-luna` at `max`",
+];
+assert.ok(
+  !absentPrompt.includes("OpenAI quota fallback"),
+  "emitted Firstmate prompt still describes Luna as fallback-only",
+);
 for (const needle of required) {
   assert.ok(absentPrompt.includes(needle), `emitted prompt missing: ${needle}`);
 }
@@ -174,6 +187,12 @@ for (const needle of successor) {
   assert.ok(
     absentPrompt.includes(needle),
     `absent-memory prompt missing successor instruction: ${needle}`,
+  );
+}
+for (const needle of execution) {
+  assert.ok(
+    absentPrompt.includes(needle),
+    `absent-memory prompt missing standing Luna execution instruction: ${needle}`,
   );
 }
 
@@ -209,8 +228,8 @@ assert.ok(
   "stale-memory prompt lost the current Sol-first policy",
 );
 assert.ok(
-  !policy.includes("Astra high produces the plan artifact"),
-  "current coordinator policy still assigns plans to Astra",
+  !absentPrompt.includes("Astra high produces the plan artifact"),
+  "emitted current coordinator prompt still assigns plans to Astra",
 );
 assert.ok(
   stalePrompt.indexOf(currentSolPolicy) <
@@ -233,6 +252,12 @@ for (const needle of successor) {
   assert.ok(
     stalePrompt.includes(needle),
     `stale-memory prompt missing successor instruction: ${needle}`,
+  );
+}
+for (const needle of execution) {
+  assert.ok(
+    stalePrompt.includes(needle),
+    `stale-memory prompt missing standing Luna execution instruction: ${needle}`,
   );
 }
 
@@ -276,7 +301,12 @@ const loaderPrompt = buildSystemPrompt({
 });
 assert.ok(loaderPrompt.includes("Never omit that look to save quota"));
 assert.ok(loaderPrompt.includes("STALE_CAPTAIN_MEMORY_MARKER"));
-assert.ok(loaderPrompt.includes("Luna always runs at max"));
+for (const needle of execution) {
+  assert.ok(
+    loaderPrompt.includes(needle),
+    `resource-loader prompt missing standing Luna execution instruction: ${needle}`,
+  );
+}
 assert.ok(
   loaderPrompt.includes("does not prove model obedience or scheduled automation"),
   "loader prompt must not claim these instructions prove obedience or automation",

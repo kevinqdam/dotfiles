@@ -34,9 +34,9 @@ Plan-only remains plan-only. Enter `gsd-plan` now. Use a short `gsd-discuss` onl
 
 ### gsd-work
 
-Grok implements, tests, lints, resolves review findings, and drives no-mistakes/CI.
+Luna max implements, tests, lints, resolves review findings, and drives no-mistakes/CI. The standing fresh execution route and unpinned default are Pi `openai-codex/gpt-6-luna` at `max`. Explicit captain-selected harness, model, and effort take precedence.
 
-Firstmate obtains one bounded Sol-high review of finished output before calling a PR ready and records the reviewed revision and findings. Never omit that look to save quota. The same evidence-gated Astra exception applies to this review; the review stage alone is not grounds for Astra. If the captain explicitly selects a model or effort, honor that choice, including Astra or a Pi-based OpenAI quota fallback.
+Firstmate obtains one bounded Sol-high review of finished output before calling a PR ready and records the reviewed revision and findings. Never omit that look to save quota. The same evidence-gated Astra exception applies to this review; the review stage alone is not grounds for Astra. If the captain explicitly selects a model or effort, honor that choice, including Astra.
 
 Unresolved blockers prevent readiness. After the independent Firstmate look, skip no-mistakes's `review` step, not validation. Keep the no-mistakes agent as Pi, never `auto` (auto picks Codex). Model and effort are defaults, not pins: explicit captain-selected harness, model, and effort requests take precedence. No automatic second Sol or Astra loop. The look is not implicit merge permission.
 
@@ -45,13 +45,20 @@ Unresolved blockers prevent readiness. After the independent Firstmate look, ski
 - Firstmate Grok medium: interview, route, and pack context.
 - Sol high: ordinary reasoning, written plans, bounded plan reviews, and one bounded finished-output review per ship.
 - Astra high: one bounded consult only for the documented consequential blocker after Sol, unless explicitly selected by the captain.
-- Grok high: implementation, tests, lint, no-mistakes, and CI.
+- Luna max: mechanical and well-scoped implementation, tests, lint, no-mistakes, validation, CI, and unattended execution.
 - Workers, scouts, and no-mistakes step agents: execute the assigned phase only. No recursive cycle.
 
 ## Unpinned Grok successors
 
 Coordinator only. Workers, scouts, and no-mistakes step agents do not apply this rule and do not start a successor migration.
 
-For unpinned Firstmate and no-mistakes Grok defaults, adopt the newest verified generally available successor in the chosen Grok family without a fresh upgrade request. Verify support through the chosen harness catalog before selecting a concrete model ID. Do not guess a latest alias, wildcard, or another harness's catalog, and do not jump to an unrelated variant. Keep the current roles and efforts: Sol high for ordinary reasoning, written plans, bounded plan reviews, and one bounded finished-output review; Astra high only for a documented consequential blocker after Sol or an explicit captain selection; coordinator Grok medium; implementation, validation, and pipeline Grok high. A successor changes only unpinned Grok model IDs, not these roles or efforts.
+For unpinned Firstmate coordinator Grok-medium defaults, adopt the newest verified generally available successor in the chosen Grok family without a fresh upgrade request. Verify support through the chosen harness catalog before selecting a concrete model ID. Do not guess a latest alias, wildcard, or another harness's catalog, and do not jump to an unrelated variant. This successor rule applies only to the coordinator's Grok-medium role; it does not change the standing Luna execution route. Keep the current roles and efforts: Sol high for ordinary reasoning, written plans, bounded plan reviews, and one bounded finished-output review; Astra high only for a documented consequential blocker after Sol or an explicit captain selection; coordinator Grok medium; Luna max for execution. A successor changes only an unpinned Grok coordinator model ID, not these roles or efforts.
 
-Preserve explicit pins, custom argument nodes, comments, and empty argument lists. Luna always runs at max. Explicit captain-selected model and effort requests still take precedence, including an OpenAI quota fallback through Pi. Delegate the choice to Firstmate's existing catalog-aware dispatch policy in Firstmate `AGENTS.md` section 4 and `docs/configuration.md`. Do not add a resolver, service, cron, or a second selection algorithm. A passive rebuild, catalog refresh, or unattended daemon does not migrate existing concrete model IDs. Never interrupt an active session or run to apply a successor. Loading this instruction does not prove model obedience or scheduled automation, and it does not rewrite live settings.
+Preserve captain-selected harness, model, and effort pins, existing custom argument nodes, comments, and empty argument lists. The fresh execution default is Pi `openai-codex/gpt-6-luna` at `max`. Delegate any Grok successor choice to Firstmate's existing catalog-aware dispatch policy in Firstmate `AGENTS.md` section 4 and `docs/configuration.md`. Do not add a resolver, service, cron, or a second selection algorithm. A passive rebuild, catalog refresh, or unattended daemon does not migrate existing concrete model IDs or restart active work. Never interrupt an active session or run to apply a successor. Loading this instruction does not prove model obedience or scheduled automation, and it does not rewrite live settings.
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.
