@@ -11,19 +11,24 @@ import stat
 import sys
 
 APPROVED_AGENT = "pi"
-DEFAULT_PI_ARGS = ("--model", "xai/grok-4.7", "--thinking", "high")
+DEFAULT_PI_ARGS = (
+    "--model",
+    "openai-codex/gpt-6-luna",
+    "--thinking",
+    "max",
+)
 CONFIG_NAME = "config.yaml"
 MAX_BYTES = 1_048_576
 STUB = """\
-# Pipeline execution defaults to Pi with Grok; explicit captain model choices
-# are preserved. Sol handles routine Firstmate review; Astra is exception-only.
+# Pipeline execution defaults to Pi with Luna at max; explicit captain model
+# choices are preserved. Sol handles routine Firstmate review; Astra is gated.
 agent: pi
 agent_args_override:
   pi:
     - --model
-    - xai/grok-4.7
+    - openai-codex/gpt-6-luna
     - --thinking
-    - high
+    - max
 """
 
 KEY_RE = re.compile(
