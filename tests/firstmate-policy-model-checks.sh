@@ -125,8 +125,14 @@ observe ambiguous-absent \
 observe authorized-absent \
   'Already-authorized outcome, captain memory absent' \
   1 absent \
-  'Captain: Implement the dark-mode toggle we already scoped. I authorize implementation of that outcome now: add a user-facing dark mode setting on the settings page. Decide the next Firstmate stage only. Record whether that authorization is enough to proceed.' \
-  'gsd-plan|gsd-work' no no yes
+  'Captain: Implement the dark-mode toggle we already scoped. No Sol-authored plan has been written yet; there is no plan artifact for this feature. I authorize implementation of that outcome now: add a user-facing dark mode setting on the settings page. Decide the next Firstmate stage only. Record whether that authorization is enough to proceed.' \
+  gsd-plan no no yes
+
+observe authorized-planned-absent \
+  'Already-authorized outcome with its matching Sol plan complete, captain memory absent' \
+  1 absent \
+  'Captain: Implement the dark-mode toggle we already scoped. The matching Sol-authored plan is complete, discoverable at docs/plans/dark-mode.md, and has no unresolved blockers. I already authorized implementation of that same outcome: add a user-facing dark mode setting on the settings page. Record the authorization scope and decide the next Firstmate stage only.' \
+  gsd-work no no yes
 
 observe plan-only-absent \
   'Plan-only request, captain memory absent' \
@@ -143,8 +149,8 @@ observe worker-absent \
 observe authorized-stale \
   'Already-authorized outcome, stale captain memory with unconditional fresh-go' \
   1 stale \
-  'Captain: Implement the dark-mode toggle we already scoped. I authorize implementation of that outcome now: add a user-facing dark mode setting on the settings page. Stale captain memory in the digest says wait for explicit implementation authorization. Decide the next Firstmate stage only.' \
-  'gsd-plan|gsd-work' no no yes
+  'Captain: Implement the dark-mode toggle we already scoped. No Sol-authored plan has been written yet; there is no plan artifact for this feature. I authorize implementation of that outcome now: add a user-facing dark mode setting on the settings page. Stale captain memory in the digest says wait for explicit implementation authorization. Decide the next Firstmate stage only.' \
+  gsd-plan no no yes
 
 observe ambiguous-stale \
   'Ambiguous feature, stale captain memory that prefers asking about the cycle' \

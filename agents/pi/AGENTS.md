@@ -8,7 +8,7 @@ Ignore this policy in ordinary coding sessions, as a dispatched crewmate or scou
 
 This policy supersedes older standing workflow wording that prefers or asks whether to use the cycle, and older captain-memory wording that always waits for a fresh explicit implementation go. If the captain already authorized implementation of that same outcome, record the actual authorization and scope and do not wait for another go. Current captain instructions and the current task's assigned scope still win for that task.
 
-`gsd-discuss`, `gsd-plan`, and `gsd-work` are stage names, not shell commands. No GSD package is required.
+`gsd-discuss`, `gsd-plan`, and `gsd-work` are stage names, not shell commands. No GSD package is required. Their internal coordinator skills live in Firstmate's project skill tree; this file is the global coordinator policy, linked by Home Manager. In a trusted Firstmate project context, load the matching skill before each stage. Pi `--no-skills`, untrusted context, and non-Firstmate working directories cannot claim those skills or this cycle are available; those delivery paths are unsupported.
 
 Loading this file is not a scheduler. Firstmate still owns transitions and checks plan, authorization, review evidence, and validation before calling work ready.
 
@@ -16,9 +16,11 @@ This delivery path is Pi's automatic global `AGENTS.md` load, including direct F
 
 ## Automatic cycle
 
-For feature work, automatically use `gsd-discuss → gsd-plan → gsd-work`. Do not ask whether to use the cycle.
+For feature work, automatically use `gsd-discuss → gsd-plan → gsd-work`. Do not ask whether to use the cycle. Sol high must finish a written, discoverable plan for the same outcome before any Luna feature-work spawn, even when the captain authorized implementation up front. Authorization and plan completion are separate gates: prior authorization removes only the need to ask for another go, never the plan requirement.
 
 ### gsd-discuss
+
+Load Firstmate's internal `gsd-discuss` skill before this stage.
 
 Firstmate Grok medium interviews for missing goals, users, expectations, non-goals, constraints, risks, and acceptance evidence, scaled to ambiguity. Reuse answers already supplied. Do not re-ask settled questions.
 
@@ -26,13 +28,17 @@ An ambiguous feature still starts `gsd-discuss` without asking. The interview st
 
 ### gsd-plan
 
+Load Firstmate's internal `gsd-plan` skill before this stage.
+
 Sol high owns ordinary reasoning (including architecture, diagnosis, design, and security analysis), the written plan artifact, and bounded reviews of plans. Use Astra high only when a specific consequential reasoning blocker remains unresolved after a bounded Sol-high pass, or when the captain explicitly selects Astra. For an escalation, record the unresolved blocker, the exact decision question, and why another normal Sol pass or narrower evidence gathering cannot settle it; dispatch one bounded Astra-high consult on that question. An important-sounding label, broad architecture or security category, subjective difficulty, ordinary review, plan stage, quota/cost concern, or Sol outage is not by itself an exception. Gather missing evidence or stay with Sol rather than silently switching. Return routine reasoning to Sol afterwards; do not create an automatic second Astra loop.
 
-Wait for go before `gsd-work` unless the captain already authorized implementation of that same outcome. Record the actual authorization and the authorized scope. Do not treat a plan, a dispatch, or this file as implementation authorization. Stale captain memory that requires a fresh go even after that authorization is superseded here.
+For every feature, Sol high must author and finish a discoverable plan matching the requested outcome before any Luna work spawn; Firstmate confirms the plan is complete and has no unresolved blocker. A dispatch or an authorization message is not evidence that the plan exists or is complete. If the captain already authorized implementation of that same outcome, record the actual authorization and scope; after the plan is complete, proceed without asking for another go. Otherwise wait for go before `gsd-work`. A plan, dispatch, or this file is not implementation authorization. Stale captain memory that requires a fresh go even after that authorization is superseded here.
 
 Plan-only remains plan-only. Enter `gsd-plan` now. Use a short `gsd-discuss` only when required facts are missing, then return to the plan. Do not start `gsd-work`. Do not wait for implementation go: a plan-only request has no implementation step.
 
 ### gsd-work
+
+Load Firstmate's internal `gsd-work` skill only after the matching Sol plan is complete, Firstmate has confirmed there are no unresolved blockers, and implementation is authorized (by a fresh go or recorded prior authorization of that outcome). Include the plan pointer and authorization scope in Luna's brief. A feature dispatch before those gates is not allowed.
 
 Luna max implements, tests, lints, resolves review findings, and drives no-mistakes/CI. The standing fresh execution route and unpinned default are Pi `openai-codex/gpt-6-luna` at `max`. Explicit captain-selected harness, model, and effort take precedence.
 

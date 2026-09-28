@@ -98,15 +98,15 @@ jq -e '
   and .rules[0].when == "explicit captain-selected Astra, or a documented consequential reasoning blocker remaining after a Sol-high pass with a bounded question and why ordinary Sol or narrower evidence cannot settle it"
   and .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "high"}
   and .rules[0].why == "Astra is an exceptional bounded consult only for a documented consequential blocker after Sol high, or an explicit captain choice. Record the blocker, exact decision question, and why another Sol pass or narrower evidence will not settle it. Stage, security label, subjective difficulty, quota, and outage are not exceptions."
-  and .rules[1].when == "planning, architecture, diagnosis, design, security analysis, or a bounded review of a plan or already-produced output, unless the documented exceptional Astra gate is satisfied"
+  and .rules[1].when == "planning, architecture, diagnosis, design, security analysis, or a bounded review of a plan or already-produced output, unless the documented exceptional Astra gate is satisfied; every feature still needs a Sol-authored plan before Luna, even when implementation is pre-authorized"
   and .rules[1].use == {harness: "pi", model: "gpt-6-sol", effort: "high"}
-  and .rules[1].why == "Sol high owns ordinary written plans and bounded reasoning or finished-output reviews. The coordinator must verify the evidence-gated Astra exception before dispatch; these free-text categories are not a deterministic classifier. Captain-selected harness, model, and effort take precedence."
+  and .rules[1].why == "Sol high owns ordinary written plans and bounded reasoning or finished-output reviews. Every feature requires a matching completed Sol-authored plan before Luna, even if implementation was authorized up front; prior authorization skips only another go. An Astra consult does not replace the Sol plan. The coordinator verifies the evidence-gated Astra exception; this free-text routing advice is not a deterministic transition. Captain-selected harness, model, and effort take precedence."
   and .rules[2].when == "mechanical, fully specified edits"
   and .rules[2].use == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
   and .rules[2].why == "Luna max is the standing route for mechanical, fully specified edits; Sol owns routine high-reasoning work and Astra remains evidence-gated."
-  and .rules[3].when == "well-scoped implementation"
+  and .rules[3].when == "well-scoped non-feature implementation, or feature implementation only after its matching Sol-high plan is complete and implementation is authorized"
   and .rules[3].use == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
-  and .rules[3].why == "Luna max is the standing route for well-scoped implementation; Sol owns routine high-reasoning work and Astra remains evidence-gated."
+  and .rules[3].why == "Luna max handles well-scoped non-feature implementation as before. For feature work, Luna follows a matching completed Sol-high plan and implementation authorization (fresh go or recorded prior authorization); pre-authorization does not waive planning. This free-text routing advice is not a deterministic transition."
   and .rules[4].when == "driving no-mistakes, validation, CI, or any long unattended pipeline"
   and .rules[4].use == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
   and .rules[4].why == "Luna max drives no-mistakes, validation, CI, and unattended pipelines after the separate Firstmate review; no-mistakes stays on Pi, never auto."

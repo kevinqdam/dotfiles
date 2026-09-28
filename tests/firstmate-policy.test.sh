@@ -123,8 +123,8 @@ const required = [
   "why another normal Sol pass or narrower evidence gathering cannot settle it",
   "An important-sounding label, broad architecture or security category, subjective difficulty, ordinary review, plan stage, quota/cost concern, or Sol outage is not by itself an exception",
   "Gather missing evidence or stay with Sol rather than silently switching",
-  "Wait for go before `gsd-work` unless the captain already authorized implementation of that same outcome",
-  "Record the actual authorization",
+  "If the captain already authorized implementation of that same outcome, record the actual authorization and scope; after the plan is complete, proceed without asking for another go.",
+  "record the actual authorization and scope",
   "Plan-only remains plan-only",
   "Enter `gsd-plan` now",
   "Do not wait for implementation go: a plan-only request has no implementation step",
@@ -201,8 +201,8 @@ assert.ok(
   "ambiguous-feature instructions missing from emitted prompt",
 );
 assert.ok(
-  absentPrompt.includes("unless the captain already authorized implementation of that same outcome"),
-  "already-authorized instructions missing from emitted prompt",
+  absentPrompt.includes("Sol high must finish a written, discoverable plan for the same outcome before any Luna feature-work spawn, even when the captain authorized implementation up front."),
+  "preauthorized feature instructions missing the plan-before-work gate from emitted prompt",
 );
 assert.ok(
   absentPrompt.includes("Plan-only remains plan-only"),
@@ -213,12 +213,36 @@ assert.ok(
   "nonrecursive-worker instructions missing from emitted prompt",
 );
 
+const planBeforeWork = [
+  "Load Firstmate's internal `gsd-discuss` skill before this stage.",
+  "Load Firstmate's internal `gsd-plan` skill before this stage.",
+  "Load Firstmate's internal `gsd-work` skill only after the matching Sol plan is complete",
+  "Sol high must finish a written, discoverable plan for the same outcome before any Luna feature-work spawn, even when the captain authorized implementation up front.",
+  "Authorization and plan completion are separate gates",
+  "For every feature, Sol high must author and finish a discoverable plan matching the requested outcome before any Luna work spawn",
+  "A dispatch or an authorization message is not evidence that the plan exists or is complete.",
+  "after the plan is complete, proceed without asking for another go",
+  "Include the plan pointer and authorization scope in Luna's brief.",
+];
+function assertPlanBeforeWork(prompt, label) {
+  for (const needle of planBeforeWork) {
+    assert.ok(prompt.includes(needle), `${label} missing plan-before-work policy: ${needle}`);
+  }
+  assert.ok(
+    prompt.indexOf("For every feature, Sol high must author and finish a discoverable plan") <
+      prompt.indexOf("Load Firstmate's internal `gsd-work` skill only after the matching Sol plan is complete"),
+    `${label} presents Luna work before the Sol plan gate`,
+  );
+}
+assertPlanBeforeWork(absentPrompt, "absent-memory prompt");
+
 const staleFiles = loadProjectContextFiles({ cwd: staleDir, agentDir });
 assert.equal(staleFiles.length, 2, "expected global policy plus stale-memory Firstmate context");
 assert.equal(staleFiles[0].content, policy);
 assert.match(staleFiles[1].content, /STALE_CAPTAIN_MEMORY_MARKER/);
 assert.match(staleFiles[1].content, /wait for explicit implementation authorization/);
 const stalePrompt = emit(staleDir, staleFiles);
+assertPlanBeforeWork(stalePrompt, "stale-memory prompt");
 assert.match(stalePrompt, /STALE_CAPTAIN_MEMORY_MARKER/);
 assert.match(stalePrompt, /wait for explicit implementation authorization/);
 const currentSolPolicy =
@@ -299,6 +323,7 @@ const loaderPrompt = buildSystemPrompt({
   cwd: staleDir,
   contextFiles: loaded,
 });
+assertPlanBeforeWork(loaderPrompt, "DefaultResourceLoader.reload prompt");
 assert.ok(loaderPrompt.includes("Never omit that look to save quota"));
 assert.ok(loaderPrompt.includes("STALE_CAPTAIN_MEMORY_MARKER"));
 for (const needle of execution) {
