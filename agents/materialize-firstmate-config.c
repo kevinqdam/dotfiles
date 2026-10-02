@@ -36,7 +36,7 @@ static const char crew_dispatch[] =
     "      \"when\": \"planning, architecture, diagnosis, design, security analysis, or a bounded review of a plan or already-produced output, unless the documented exceptional Astra gate is satisfied\",\n"
     "      \"use\": {\n"
     "        \"harness\": \"pi\",\n"
-    "        \"model\": \"gpt-6-sol\",\n"
+    "        \"model\": \"openai-codex/gpt-6.1-sol\",\n"
     "        \"effort\": \"high\"\n"
     "      },\n"
     "      \"why\": \"Sol high owns ordinary written plans and bounded reasoning or finished-output reviews. The coordinator must verify the evidence-gated Astra exception before dispatch; these free-text categories are not a deterministic classifier. Captain-selected harness, model, and effort take precedence.\"\n"
