@@ -26,6 +26,8 @@ An ambiguous feature still starts `gsd-discuss` without asking. The interview st
 
 ### gsd-plan
 
+The unpinned higher-reasoning default is Pi `openai-codex/gpt-6.1-sol` at `high`; explicit captain-selected harness, model, and effort take precedence.
+
 Sol high owns ordinary reasoning (including architecture, diagnosis, design, and security analysis), the written plan artifact, and bounded reviews of plans. Use Astra high only when a specific consequential reasoning blocker remains unresolved after a bounded Sol-high pass, or when the captain explicitly selects Astra. For an escalation, record the unresolved blocker, the exact decision question, and why another normal Sol pass or narrower evidence gathering cannot settle it; dispatch one bounded Astra-high consult on that question. An important-sounding label, broad architecture or security category, subjective difficulty, ordinary review, plan stage, quota/cost concern, or Sol outage is not by itself an exception. Gather missing evidence or stay with Sol rather than silently switching. Return routine reasoning to Sol afterwards; do not create an automatic second Astra loop.
 
 Wait for go before `gsd-work` unless the captain already authorized implementation of that same outcome. Record the actual authorization and the authorized scope. Do not treat a plan, a dispatch, or this file as implementation authorization. Stale captain memory that requires a fresh go even after that authorization is superseded here.

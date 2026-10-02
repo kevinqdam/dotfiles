@@ -99,7 +99,7 @@ jq -e '
   and .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "high"}
   and .rules[0].why == "Astra is an exceptional bounded consult only for a documented consequential blocker after Sol high, or an explicit captain choice. Record the blocker, exact decision question, and why another Sol pass or narrower evidence will not settle it. Stage, security label, subjective difficulty, quota, and outage are not exceptions."
   and .rules[1].when == "planning, architecture, diagnosis, design, security analysis, or a bounded review of a plan or already-produced output, unless the documented exceptional Astra gate is satisfied"
-  and .rules[1].use == {harness: "pi", model: "gpt-6-sol", effort: "high"}
+  and .rules[1].use == {harness: "pi", model: "openai-codex/gpt-6.1-sol", effort: "high"}
   and .rules[1].why == "Sol high owns ordinary written plans and bounded reasoning or finished-output reviews. The coordinator must verify the evidence-gated Astra exception before dispatch; these free-text categories are not a deterministic classifier. Captain-selected harness, model, and effort take precedence."
   and .rules[2].when == "mechanical, fully specified edits"
   and .rules[2].use == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
@@ -112,6 +112,40 @@ jq -e '
   and .rules[4].why == "Luna max drives no-mistakes, validation, CI, and unattended pipelines after the separate Firstmate review; no-mistakes stays on Pi, never auto."
   and .default == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
 ' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved Sol/Astra reasoning and Luna execution configuration'
+
+assert_seeded_sol_model_preserved() {
+  name=$1
+  model=$2
+  target_home="$TMP/$name"
+  mkdir -p "$target_home/config"
+  cp "$fresh/config/crew-dispatch.json" "$target_home/config/crew-dispatch.json"
+  updated="$target_home/config/crew-dispatch.updated.json"
+  jq --arg model "$model" '.rules[1].use.model = $model' \
+    "$target_home/config/crew-dispatch.json" > "$updated"
+  mv "$updated" "$target_home/config/crew-dispatch.json"
+  jq -S 'del(.rules[1].use.model)' "$target_home/config/crew-dispatch.json" > "$TMP/$name.actual.json"
+  jq -S 'del(.rules[1].use.model)' "$fresh/config/crew-dispatch.json" > "$TMP/$name.fresh.json"
+  if ! cmp -s "$TMP/$name.fresh.json" "$TMP/$name.actual.json"; then
+    fail "$name fixture changed more than the routine Sol model"
+  fi
+  snapshot="$TMP/$name.expected"
+  cp "$target_home/config/crew-dispatch.json" "$snapshot"
+  before_inode=$(inode_of "$target_home/config/crew-dispatch.json")
+  "$MATERIALIZER" "$target_home" >/dev/null
+  "$MATERIALIZER" "$target_home" >/dev/null
+  if ! cmp -s "$snapshot" "$target_home/config/crew-dispatch.json"; then
+    fail "$name existing dispatch bytes were rewritten"
+  fi
+  assert_eq "$before_inode" "$(inode_of "$target_home/config/crew-dispatch.json")"
+  if ! jq -e --arg model "$model" \
+    '.rules[1].use.model == $model and .rules[1].use.effort == "high"' \
+    "$target_home/config/crew-dispatch.json" >/dev/null; then
+    fail "$name model or high-effort pin was not preserved"
+  fi
+}
+
+assert_seeded_sol_model_preserved old-sol-bare-seed gpt-6-sol
+assert_seeded_sol_model_preserved old-sol-qualified-seed openai-codex/gpt-6-sol
 
 populated="$TMP/populated"
 mkdir -p "$populated/config" "$populated/data" "$populated/state" "$populated/projects"
@@ -264,6 +298,8 @@ assert_existing_dispatch_pin historical-grok47-dispatch xai/grok-4.7 high
 assert_existing_dispatch_pin operator-luna56-dispatch openai-codex/gpt-5.6-luna max
 assert_existing_dispatch_pin operator-luna6-max-dispatch openai-codex/gpt-6-luna max
 assert_existing_dispatch_pin operator-luna6-effort-dispatch openai-codex/gpt-6-luna medium
+assert_existing_dispatch_pin operator-old-sol-effort-dispatch openai-codex/gpt-6-sol medium
+assert_existing_dispatch_pin operator-sol61-effort-dispatch openai-codex/gpt-6.1-sol medium
 
 conflict="$TMP/conflict"
 mkdir -p "$conflict/config"
