@@ -36,7 +36,7 @@ static const char crew_dispatch[] =
     "      \"when\": \"planning, architecture, diagnosis, design, security analysis, or a bounded review of a plan or already-produced output, unless the documented exceptional Astra gate is satisfied; every feature still needs a Sol-authored plan before Luna, even when implementation is pre-authorized\",\n"
     "      \"use\": {\n"
     "        \"harness\": \"pi\",\n"
-    "        \"model\": \"gpt-6-sol\",\n"
+    "        \"model\": \"openai-codex/gpt-6.1-sol\",\n"
     "        \"effort\": \"high\"\n"
     "      },\n"
     "      \"why\": \"Sol high owns ordinary written plans and bounded reasoning or finished-output reviews. Every feature requires a matching completed Sol-authored plan before Luna, even if implementation was authorized up front; prior authorization skips only another go. An Astra consult does not replace the Sol plan. The coordinator verifies the evidence-gated Astra exception; this free-text routing advice is not a deterministic transition. Captain-selected harness, model, and effort take precedence.\"\n"

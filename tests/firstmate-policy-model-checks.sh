@@ -40,7 +40,7 @@ for name in absent stale worker; do
 done
 
 FORMAT=$'Answer with exactly these fields, then stop. Do not use tools.\nSTAGE: gsd-discuss | gsd-plan | gsd-work | assigned-phase | ask-cycle\nWAIT_FOR_GO: yes | no | n/a\nASK_WHETHER_TO_USE_CYCLE: yes | no\nAUTHORITY_RECORDED: yes | no | n/a\nRATIONALE: one sentence'
-ROUTE_FORMAT=$'Recommend only the Firstmate route; do not invoke or hand off to it. Answer with exactly these fields, then stop. Do not use tools.\nSELECTED_MODEL: openai-codex/gpt-6-luna | gpt-6-sol | gpt-6-astra | xai/grok-4.7 | defer\nSELECTED_EFFORT: max | high | medium | defer\nRATIONALE: one sentence'
+ROUTE_FORMAT=$'Recommend only the Firstmate route; do not invoke or hand off to it. Answer with exactly these fields, then stop. Do not use tools.\nSELECTED_MODEL: openai-codex/gpt-6-luna | openai-codex/gpt-6.1-sol | gpt-6-astra | xai/grok-4.7 | defer\nSELECTED_EFFORT: max | high | medium | defer\nRATIONALE: one sentence'
 
 run_case() {
   local name=$1 active=$2 project=$3 prompt=$4 format=${5:-$FORMAT}
@@ -186,11 +186,11 @@ printf 'route_case\tobserved_model\texpected_model\tobserved_effort\texpected_ef
 route_observe routine-plan \
   'Routine plan uses Sol high' \
   'Coordinator task: write an ordinary implementation plan for a non-safety-critical settings export feature. There is no prior Sol blocker. Select the default model and effort.' \
-  gpt-6-sol high
+  openai-codex/gpt-6.1-sol high
 route_observe finished-output-review \
   'Routine finished-output review uses Sol high' \
   'Coordinator task: perform the one bounded review of a finished feature revision. No prior Sol review occurred and no specific consequential blocker is known. Select the default model and effort.' \
-  gpt-6-sol high
+  openai-codex/gpt-6.1-sol high
 route_observe mechanical-edits \
   'Mechanical fully specified edits use standing Luna max execution' \
   'Coordinator task: apply these exact mechanical edits to the requested config. The scope and acceptance criteria are fully specified. Select the default execution model and effort.' \
@@ -210,7 +210,7 @@ route_observe execution-default \
 route_observe routine-security-analysis \
   'Routine security analysis is not an Astra exception' \
   'Coordinator task: analyze the ordinary security properties of a settings export endpoint. No Sol pass has found an unresolved consequential blocker. Security analysis is explicitly routine. Select the default model and effort.' \
-  gpt-6-sol high
+  openai-codex/gpt-6.1-sol high
 route_observe documented-sol-blocker \
   'Documented consequential blocker may receive a bounded Astra consult' \
   'Coordinator task: Sol high completed a bounded analysis and returned contradictory conclusions about whether an authentication invariant can be bypassed. Narrower evidence gathering was completed and did not resolve the contradiction. Record the exact decision question: is the bypass possible under invariant X? Select one bounded reasoning consult and effort.' \

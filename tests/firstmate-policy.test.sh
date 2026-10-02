@@ -104,6 +104,8 @@ assert.match(absentPrompt, /<project_context>/);
 assert.match(absentPrompt, /ABSENT_CAPTAIN_MEMORY_MARKER/);
 assert.match(absentPrompt, /FIRSTMATE_PROJECT_CONTEXT_MARKER/);
 
+const sol61Default =
+  "The unpinned higher-reasoning default is Pi `openai-codex/gpt-6.1-sol` at `high`; explicit captain-selected harness, model, and effort take precedence.";
 const required = [
   "Firstmate coordinator",
   "ordinary coding",
@@ -197,6 +199,10 @@ for (const needle of execution) {
 }
 
 assert.ok(
+  absentPrompt.includes(sol61Default),
+  "absent-memory prompt missing the Sol 6.1 high default",
+);
+assert.ok(
   absentPrompt.includes("An ambiguous feature still starts `gsd-discuss` without asking"),
   "ambiguous-feature instructions missing from emitted prompt",
 );
@@ -250,6 +256,10 @@ const currentSolPolicy =
 assert.ok(
   stalePrompt.includes(currentSolPolicy),
   "stale-memory prompt lost the current Sol-first policy",
+);
+assert.ok(
+  stalePrompt.includes(sol61Default),
+  "stale-memory prompt missing the Sol 6.1 high default",
 );
 assert.ok(
   !absentPrompt.includes("Astra high produces the plan artifact"),
@@ -325,6 +335,10 @@ const loaderPrompt = buildSystemPrompt({
 });
 assertPlanBeforeWork(loaderPrompt, "DefaultResourceLoader.reload prompt");
 assert.ok(loaderPrompt.includes("Never omit that look to save quota"));
+assert.ok(
+  loaderPrompt.includes(sol61Default),
+  "resource-loader prompt missing the Sol 6.1 high default",
+);
 assert.ok(loaderPrompt.includes("STALE_CAPTAIN_MEMORY_MARKER"));
 for (const needle of execution) {
   assert.ok(
