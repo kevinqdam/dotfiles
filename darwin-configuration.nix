@@ -67,7 +67,6 @@
       "grok-bot"
       "iterm2"
       "logitune"
-      "muse"
       "raycast"
       "superwhisper"
       "tailscale-app"
