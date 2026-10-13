@@ -49,10 +49,10 @@ let
 
   axiTools = pkgs.buildNpmPackage {
     pname = "firstmate-axi-toolchain";
-    version = "2026-08-23";
+    version = "2026-10-02";
     src = ./axi-tools;
     nodejs = pkgs.nodejs_22;
-    npmDepsHash = "sha256-S/XwdHQYIlYzG5s+WC06I2X+H2BCpTAqbvkhV5yzTJY=";
+    npmDepsHash = "sha256-gxdEfipIgFHVkih6ccjeOmkRzTN1J+H2jrTsnRF1WJc=";
     npmBuildScript = "build";
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postInstall = ''

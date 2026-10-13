@@ -8,8 +8,8 @@
     "chrome-devtools-mcp": "1.7.0",
     "gh-axi": "0.1.33",
     "lavish-axi": "0.1.57",
-    "quota-axi": "0.1.30",
-    "tasks-axi": "0.2.5"
+    "quota-axi": "0.1.51",
+    "tasks-axi": "0.2.6"
   },
   "scripts": {
     "build": "true"
