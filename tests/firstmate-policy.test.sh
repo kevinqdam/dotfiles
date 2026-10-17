@@ -26,10 +26,18 @@ grep -Fqx '  home.file.".gemini/antigravity-cli/agents.md".source = ./AGENTS.md;
 [ -f "$FIXTURES/absent/AGENTS.md" ] || fail 'absent-captain fixture is missing'
 [ -f "$FIXTURES/stale/AGENTS.md" ] || fail 'stale-captain fixture is missing'
 [ -f "$FIXTURES/worker/AGENTS.md" ] || fail 'worker fixture is missing'
+PROBE="$SCRIPT_DIR/tests/firstmate-policy-model-checks.sh"
+grep -Fqx 'MODEL="openai-codex/gpt-6.1-sol"' "$PROBE" || fail 'optional policy probe is not Sol 6.1'
+grep -Fqx 'EFFORT="high"' "$PROBE" || fail 'optional policy probe is not high effort'
+if grep -Eq 'xai/grok|gpt-6-astra' "$PROBE"; then
+  fail 'optional policy probe offers a Grok or Astra route'
+fi
 
-PI_HOMEBREW=/opt/homebrew/bin/pi
-[ -x "$PI_HOMEBREW" ] || fail "Homebrew Pi executable is unavailable: $PI_HOMEBREW"
-PI_PKG=$(python3 - "$PI_HOMEBREW" <<'PY'
+PI_PKG=${PI_TEST_PACKAGE_DIR:-}
+if [ -z "$PI_PKG" ]; then
+  PI_HOMEBREW=/opt/homebrew/bin/pi
+  [ -x "$PI_HOMEBREW" ] || fail "Homebrew Pi executable is unavailable: $PI_HOMEBREW"
+  PI_PKG=$(python3 - "$PI_HOMEBREW" <<'PY'
 from pathlib import Path
 import sys
 p = Path(sys.argv[1]).resolve()
@@ -41,7 +49,8 @@ for parent in p.parents:
 else:
     sys.exit(1)
 PY
-) || fail "Pi package is unavailable from $PI_HOMEBREW"
+  ) || fail "Pi package is unavailable from $PI_HOMEBREW"
+fi
 [ -f "$PI_PKG/dist/index.js" ] || fail "Pi package is unavailable: $PI_PKG"
 [ -f "$PI_PKG/dist/core/system-prompt.js" ] || fail "Pi prompt builder is unavailable"
 
@@ -105,48 +114,44 @@ assert.match(absentPrompt, /ABSENT_CAPTAIN_MEMORY_MARKER/);
 assert.match(absentPrompt, /FIRSTMATE_PROJECT_CONTEXT_MARKER/);
 
 const sol61Default =
-  "The unpinned higher-reasoning default is Pi `openai-codex/gpt-6.1-sol` at `high`; explicit captain-selected harness, model, and effort take precedence.";
+  "Use Pi `openai-codex/gpt-6.1-sol` at `high` for proportional interviews, routing, and context packing.";
 const required = [
   "Firstmate coordinator",
-  "ordinary coding",
-  "dispatched crewmate",
-  "no-mistakes step",
+  "ordinary coding sessions",
+  "dispatched crewmate or scout",
+  "no-mistakes step agent",
   "Do not start another discuss-plan-work cycle",
   "gsd-discuss",
   "gsd-plan",
   "gsd-work",
   "Do not ask whether to use the cycle",
   "goals, users, expectations, non-goals, constraints, risks, and acceptance evidence",
-  "scaled to ambiguity",
-  "Reuse answers already supplied",
-  "Sol high owns ordinary reasoning (including architecture, diagnosis, design, and security analysis), the written plan artifact, and bounded reviews of plans",
-  "Use Astra high only when a specific consequential reasoning blocker remains unresolved after a bounded Sol-high pass, or when the captain explicitly selects Astra",
-  "the exact decision question",
-  "why another normal Sol pass or narrower evidence gathering cannot settle it",
-  "An important-sounding label, broad architecture or security category, subjective difficulty, ordinary review, plan stage, quota/cost concern, or Sol outage is not by itself an exception",
-  "Gather missing evidence or stay with Sol rather than silently switching",
+  "Keep the interview proportional",
+  "Reuse settled answers",
+  "coordination, ordinary reasoning, architecture, diagnosis, design, security analysis, written plans, and bounded plan reviews",
+  "No Grok coordinator route, probe, quota fallback, or alternate-provider fallback is allowed for this home",
+  "If the approved route is unavailable or a required capability is unsupported, gather narrower evidence or defer",
   "If the captain already authorized implementation of that same outcome, record the actual authorization and scope; after the plan is complete, proceed without asking for another go.",
   "record the actual authorization and scope",
   "Plan-only remains plan-only",
   "Enter `gsd-plan` now",
   "Do not wait for implementation go: a plan-only request has no implementation step",
-  "Luna max implements, tests, lints, resolves review findings, and drives no-mistakes/CI",
-  "The standing fresh execution route and unpinned default are Pi `openai-codex/gpt-6-luna` at `max`.",
-  "one bounded Sol-high review of finished output",
+  "Pi `openai-codex/gpt-6-luna` at `max` is the unpinned default for mechanical and well-scoped implementation, builds, tests, lint, no-mistakes, validation, CI, and unattended execution.",
+  "one bounded review of finished output using Sol 6.1 at high",
   "records the reviewed revision and findings",
-  "The same evidence-gated Astra exception applies to this review",
-  "the review stage alone is not grounds for Astra",
-  "Never omit that look to save quota",
-  "skip no-mistakes's `review` step, not validation",
-  "no-mistakes agent as Pi, never `auto`",
-  "Sol high: ordinary reasoning, written plans, bounded plan reviews, and one bounded finished-output review per ship",
-  "Astra high: one bounded consult only for the documented consequential blocker after Sol",
-  "Model and effort are defaults, not pins",
-  "explicit captain-selected harness, model, and effort requests take precedence",
-  "honor that choice, including Astra.",
-  "No automatic second Sol or Astra loop",
-  "not implicit merge permission",
-  "execute the assigned phase only",
+  "Skip no-mistakes's `review` step only when its gate recognizes the exact independently reviewed revision and every required check accepts that substitution",
+  "Never skip validation",
+  "no-mistakes agent Pi, never `auto`",
+  "Sol 6.1 at high: Firstmate coordination, proportional interviews, routing, context packing, reasoning, plans, diagnosis, and bounded reviews",
+  "Luna 6 at max: mechanical and well-scoped implementation, builds, tests, lint, no-mistakes, validation, CI, and unattended execution",
+  "No Grok coordinator, coding, probe, pipeline, or quota-fallback role",
+  "Grok Bot is separate from this home's Pi defaults",
+  "Preserve captain-selected harness/model/effort pins, custom arguments, comments, and empty argument lists",
+  "Use Firstmate's existing catalog-aware routing owner to verify exact model support and effort capability",
+  "Do not infer support from CLI parsing, invent equal-version requirements",
+  "add a model resolver, service, cron, or a second selection algorithm",
+  "Catalog presence is not authenticated inference or a quota guarantee",
+  "execute only their assignment",
   "stage names, not shell commands",
   "--no-context-files",
   "AGENTS.override.md",
@@ -154,42 +159,26 @@ const required = [
   "do not wait for another go",
   "Stale captain memory that requires a fresh go even after that authorization is superseded here",
 ];
-const successor = [
-  "Coordinator only",
-  "do not apply this rule",
-  "newest verified generally available successor in the chosen Grok family",
-  "without a fresh upgrade request",
-  "chosen harness catalog",
-  "Do not guess a latest alias",
-  "Keep the current roles and efforts",
-  "This successor rule applies only to the coordinator's Grok-medium role; it does not change the standing Luna execution route",
-  "A successor changes only an unpinned Grok coordinator model ID",
-  "existing catalog-aware dispatch policy",
-  "Do not add a resolver, service, cron, or a second selection algorithm",
-  "A passive rebuild, catalog refresh, or unattended daemon does not migrate existing concrete model IDs or restart active work",
-  "Never interrupt an active session or run",
-  "does not prove model obedience or scheduled automation",
-];
 const execution = [
-  "Luna max implements, tests, lints, resolves review findings, and drives no-mistakes/CI",
-  "standing fresh execution route and unpinned default are Pi `openai-codex/gpt-6-luna` at `max`",
-  "Explicit captain-selected harness, model, and effort take precedence",
-  "Luna max: mechanical and well-scoped implementation, tests, lint, no-mistakes, validation, CI, and unattended execution",
-  "Preserve captain-selected harness, model, and effort pins, existing custom argument nodes, comments, and empty argument lists",
-  "The fresh execution default is Pi `openai-codex/gpt-6-luna` at `max`",
+  "Pi `openai-codex/gpt-6-luna` at `max` is the unpinned default for mechanical and well-scoped implementation, builds, tests, lint, no-mistakes, validation, CI, and unattended execution.",
+  "Luna 6 at max: mechanical and well-scoped implementation, builds, tests, lint, no-mistakes, validation, CI, and unattended execution",
+  "Preserve captain-selected harness/model/effort pins, custom arguments, comments, and empty argument lists",
+  "No Grok coordinator, coding, probe, pipeline, or quota-fallback role",
 ];
 assert.ok(
   !absentPrompt.includes("OpenAI quota fallback"),
   "emitted Firstmate prompt still describes Luna as fallback-only",
 );
+assert.ok(
+  !absentPrompt.includes("newest verified generally available successor in the chosen Grok family"),
+  "emitted Firstmate prompt still has an automatic Grok successor policy",
+);
+assert.ok(
+  !absentPrompt.includes("Use Astra high only"),
+  "emitted Firstmate prompt still has an automatic Astra route",
+);
 for (const needle of required) {
   assert.ok(absentPrompt.includes(needle), `emitted prompt missing: ${needle}`);
-}
-for (const needle of successor) {
-  assert.ok(
-    absentPrompt.includes(needle),
-    `absent-memory prompt missing successor instruction: ${needle}`,
-  );
 }
 for (const needle of execution) {
   assert.ok(
@@ -252,7 +241,7 @@ assertPlanBeforeWork(stalePrompt, "stale-memory prompt");
 assert.match(stalePrompt, /STALE_CAPTAIN_MEMORY_MARKER/);
 assert.match(stalePrompt, /wait for explicit implementation authorization/);
 const currentSolPolicy =
-  "Sol high owns ordinary reasoning (including architecture, diagnosis, design, and security analysis), the written plan artifact, and bounded reviews of plans";
+  "Pi `openai-codex/gpt-6.1-sol` at `high` is the unpinned default for coordination, ordinary reasoning";
 assert.ok(
   stalePrompt.includes(currentSolPolicy),
   "stale-memory prompt lost the current Sol-first policy",
@@ -271,6 +260,16 @@ assert.ok(
   "stale Astra memory appeared ahead of the current Sol-first policy",
 );
 assert.ok(
+  stalePrompt.indexOf("No Grok coordinator route, probe, quota fallback") <
+    stalePrompt.indexOf("Grok medium interviews and routes"),
+  "stale Grok coordinator memory appeared ahead of the no-Grok policy",
+);
+assert.ok(
+  stalePrompt.indexOf("invent equal-version requirements") <
+    stalePrompt.indexOf("Require Luna 6.1 for every role"),
+  "stale Luna 6.1 version restriction appeared ahead of the corrected split",
+);
+assert.ok(
   stalePrompt.includes("older captain-memory wording that always waits for a fresh explicit implementation go"),
   "stale-memory prompt missing supersession of unconditional fresh-go wording",
 );
@@ -282,12 +281,6 @@ assert.ok(
   stalePrompt.includes("Current captain instructions and the current task's assigned scope still win for that task"),
   "stale-memory prompt dropped current captain-instruction precedence",
 );
-for (const needle of successor) {
-  assert.ok(
-    stalePrompt.includes(needle),
-    `stale-memory prompt missing successor instruction: ${needle}`,
-  );
-}
 for (const needle of execution) {
   assert.ok(
     stalePrompt.includes(needle),
@@ -300,9 +293,9 @@ assert.equal(workerFiles.length, 2, "expected global policy plus worker project 
 const workerPrompt = emit(workerDir, workerFiles);
 assert.match(workerPrompt, /FIRSTMATE_WORKER_CONTEXT_MARKER/);
 assert.ok(workerPrompt.includes("Do not start another discuss-plan-work cycle"));
-assert.ok(workerPrompt.includes("execute the assigned phase only"));
-assert.ok(workerPrompt.includes("Workers, scouts, and no-mistakes step agents do not apply this rule"));
-assert.ok(workerPrompt.includes("do not start a successor migration"));
+assert.ok(workerPrompt.includes("do that phase only"));
+assert.ok(workerPrompt.includes("Workers, scouts, and no-mistakes step agents execute only their assignment"));
+assert.ok(workerPrompt.includes("No Grok coordinator, coding, probe, pipeline, or quota-fallback role"));
 
 const disabledLoader = new DefaultResourceLoader({
   cwd: absentDir,
@@ -334,7 +327,7 @@ const loaderPrompt = buildSystemPrompt({
   contextFiles: loaded,
 });
 assertPlanBeforeWork(loaderPrompt, "DefaultResourceLoader.reload prompt");
-assert.ok(loaderPrompt.includes("Never omit that look to save quota"));
+assert.ok(loaderPrompt.includes("Do not omit that look to save quota"));
 assert.ok(
   loaderPrompt.includes(sol61Default),
   "resource-loader prompt missing the Sol 6.1 high default",

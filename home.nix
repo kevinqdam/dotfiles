@@ -172,6 +172,16 @@ in {
       "${./agents/pi-normalize-package.mjs}"
   '';
 
+  # Seed only missing standalone Pi model defaults inside Pi 0.84.3's own
+  # global-settings lock. Existing choices and resource state remain Pi-owned.
+  home.activation.piSettings = lib.hm.dag.entryAfter [ "piPackages" ] ''
+    ${pkgs.nodejs_22}/bin/node ${./agents/materialize-pi-settings-lock.mjs} \
+      "/opt/homebrew/bin/pi" \
+      "${pkgs.python3}/bin/python3" \
+      ${./agents/materialize-pi-settings.py} \
+      "${config.home.homeDirectory}/.pi/agent"
+  '';
+
   # Global Pi context for Firstmate coordinator discuss-plan-work policy.
   # Ordinary coding sessions, crewmates, and no-mistakes step agents ignore it.
   home.file.".pi/agent/AGENTS.md".source = ./agents/pi/AGENTS.md;

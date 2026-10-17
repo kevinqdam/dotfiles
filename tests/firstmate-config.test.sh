@@ -94,24 +94,22 @@ assert_eq 'pi' "$(cat "$fresh/config/crew-harness")"
 assert_eq '7500' "$(cat "$fresh/config/startup-memory-budget")"
 [ "$(link_count "$fresh/config/startup-memory-budget")" = 1 ] || fail 'default startup memory budget has multiple hard links'
 jq -e '
-  (.rules | length) == 5
-  and .rules[0].when == "explicit captain-selected Astra, or a documented consequential reasoning blocker remaining after a Sol-high pass with a bounded question and why ordinary Sol or narrower evidence cannot settle it"
-  and .rules[0].use == {harness: "pi", model: "gpt-6-astra", effort: "high"}
-  and .rules[0].why == "Astra is an exceptional bounded consult only for a documented consequential blocker after Sol high, or an explicit captain choice. Record the blocker, exact decision question, and why another Sol pass or narrower evidence will not settle it. Stage, security label, subjective difficulty, quota, and outage are not exceptions."
-  and .rules[1].when == "planning, architecture, diagnosis, design, security analysis, or a bounded review of a plan or already-produced output, unless the documented exceptional Astra gate is satisfied; every feature still needs a Sol-authored plan before Luna, even when implementation is pre-authorized"
-  and .rules[1].use == {harness: "pi", model: "openai-codex/gpt-6.1-sol", effort: "high"}
-  and .rules[1].why == "Sol high owns ordinary written plans and bounded reasoning or finished-output reviews. Every feature requires a matching completed Sol-authored plan before Luna, even if implementation was authorized up front; prior authorization skips only another go. An Astra consult does not replace the Sol plan. The coordinator verifies the evidence-gated Astra exception; this free-text routing advice is not a deterministic transition. Captain-selected harness, model, and effort take precedence."
-  and .rules[2].when == "mechanical, fully specified edits"
+  (.rules | length) == 4
+  and .rules[0].when == "Firstmate coordination, proportional interviews, routing, context packing, planning, architecture, diagnosis, design, security analysis, or a bounded review of a plan or finished output"
+  and .rules[0].use == {harness: "pi", model: "openai-codex/gpt-6.1-sol", effort: "high"}
+  and (.rules[0].why | contains("No Grok or Astra coordinator route, probe, quota fallback, or alternate-provider fallback"))
+  and .rules[1].when == "mechanical, fully specified edits"
+  and .rules[1].use == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
+  and .rules[2].when == "well-scoped non-feature implementation, or feature implementation only after its matching Sol-high plan is complete and implementation is authorized"
   and .rules[2].use == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
-  and .rules[2].why == "Luna max is the standing route for mechanical, fully specified edits; Sol owns routine high-reasoning work and Astra remains evidence-gated."
-  and .rules[3].when == "well-scoped non-feature implementation, or feature implementation only after its matching Sol-high plan is complete and implementation is authorized"
+  and .rules[3].when == "builds, tests, lint, no-mistakes, validation, CI, or any long unattended pipeline"
   and .rules[3].use == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
-  and .rules[3].why == "Luna max handles well-scoped non-feature implementation as before. For feature work, Luna follows a matching completed Sol-high plan and implementation authorization (fresh go or recorded prior authorization); pre-authorization does not waive planning. This free-text routing advice is not a deterministic transition."
-  and .rules[4].when == "driving no-mistakes, validation, CI, or any long unattended pipeline"
-  and .rules[4].use == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
-  and .rules[4].why == "Luna max drives no-mistakes, validation, CI, and unattended pipelines after the separate Firstmate review; no-mistakes stays on Pi, never auto."
   and .default == {harness: "pi", model: "openai-codex/gpt-6-luna", effort: "max"}
-' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved Sol/Astra reasoning and Luna execution configuration'
+' "$fresh/config/crew-dispatch.json" >/dev/null || fail 'dispatch defaults are not the approved Sol 6.1/high and Luna 6/max role split'
+if jq -e '[.rules[].use.model, .default.model] | any(test("^(xai/grok|gpt-6-astra)"))' \
+  "$fresh/config/crew-dispatch.json" >/dev/null; then
+  fail 'fresh dispatch contains an automatic Grok or Astra route'
+fi
 
 assert_seeded_sol_model_preserved() {
   name=$1
@@ -120,11 +118,11 @@ assert_seeded_sol_model_preserved() {
   mkdir -p "$target_home/config"
   cp "$fresh/config/crew-dispatch.json" "$target_home/config/crew-dispatch.json"
   updated="$target_home/config/crew-dispatch.updated.json"
-  jq --arg model "$model" '.rules[1].use.model = $model' \
+  jq --arg model "$model" '.rules[0].use.model = $model' \
     "$target_home/config/crew-dispatch.json" > "$updated"
   mv "$updated" "$target_home/config/crew-dispatch.json"
-  jq -S 'del(.rules[1].use.model)' "$target_home/config/crew-dispatch.json" > "$TMP/$name.actual.json"
-  jq -S 'del(.rules[1].use.model)' "$fresh/config/crew-dispatch.json" > "$TMP/$name.fresh.json"
+  jq -S 'del(.rules[0].use.model)' "$target_home/config/crew-dispatch.json" > "$TMP/$name.actual.json"
+  jq -S 'del(.rules[0].use.model)' "$fresh/config/crew-dispatch.json" > "$TMP/$name.fresh.json"
   if ! cmp -s "$TMP/$name.fresh.json" "$TMP/$name.actual.json"; then
     fail "$name fixture changed more than the routine Sol model"
   fi
@@ -138,7 +136,7 @@ assert_seeded_sol_model_preserved() {
   fi
   assert_eq "$before_inode" "$(inode_of "$target_home/config/crew-dispatch.json")"
   if ! jq -e --arg model "$model" \
-    '.rules[1].use.model == $model and .rules[1].use.effort == "high"' \
+    '.rules[0].use.model == $model and .rules[0].use.effort == "high"' \
     "$target_home/config/crew-dispatch.json" >/dev/null; then
     fail "$name model or high-effort pin was not preserved"
   fi

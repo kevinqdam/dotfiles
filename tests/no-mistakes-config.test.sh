@@ -120,6 +120,8 @@ python3 "$MATERIALIZER" "$fresh" >/dev/null
 [ -f "$fresh/config.yaml" ] || fail 'missing config.yaml'
 [ ! -L "$fresh/config.yaml" ] || fail 'created config.yaml is a symlink'
 assert_default_routing "$fresh/config.yaml"
+grep -Fqx '# model/effort choices are preserved. Sol 6.1 at high owns Firstmate review.' \
+  "$fresh/config.yaml" || fail 'fresh config comment does not describe the Sol/Luna role split'
 fresh_json=$(routing_json "$fresh/config.yaml")
 printf '%s\n' "$fresh_json" | jq -e '.keys == ["agent","agent_args_override"]' \
   >/dev/null || fail 'fresh config was not limited to the approved routing keys'
