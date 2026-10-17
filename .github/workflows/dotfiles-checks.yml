@@ -1,0 +1,40 @@
+name: dotfiles checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+      - name: Install locked Pi SDK test dependency
+        run: npm ci --prefix tests/pi-sdk --no-audit --no-fund
+      - name: Run deterministic configuration and prompt contracts
+        env:
+          PI_TEST_PACKAGE_DIR: ${{ github.workspace }}/tests/pi-sdk/node_modules/@earendil-works/pi-coding-agent
+        run: |
+          set -euo pipefail
+          git diff --check
+          bash -n tests/firstmate-config.test.sh tests/no-mistakes-config.test.sh \
+            tests/pi-settings-config.test.sh tests/firstmate-policy.test.sh \
+            tests/firstmate-policy-model-checks.sh
+          python3 - agents/materialize-pi-settings.py agents/materialize-no-mistakes-config.py <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              compile(Path(filename).read_text(encoding="utf-8"), filename, "exec")
+          PY
+          tests/firstmate-config.test.sh
+          tests/no-mistakes-config.test.sh
+          tests/pi-settings-config.test.sh
+          tests/firstmate-policy.test.sh

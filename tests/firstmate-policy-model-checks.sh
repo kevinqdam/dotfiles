@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Development-only Grok checks for Firstmate coordinator policy.
+# Development-only Sol 6.1/high checks for Firstmate coordinator policy.
 # Not deterministic and not a CI gate. Observed decisions are not model obedience.
-# Routing cases only ask Grok to recommend a route; this script never invokes
-# the selected route model, including Astra.
+# This uses only the approved Sol probe and never invokes a recommended route;
+# Grok is reserved for the separately used Grok Bot product.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -11,8 +11,8 @@ FIXTURES="$SCRIPT_DIR/tests/fixtures/firstmate-policy"
 EVIDENCE="${FIRSTMATE_POLICY_MODEL_CHECK_EVIDENCE:-$SCRIPT_DIR/tests/firstmate-policy-model-check-evidence.md}"
 PI_HOMEBREW=/opt/homebrew/bin/pi
 AUTH_JSON="${HOME}/.pi/agent/auth.json"
-MODEL="xai/grok-4.7"
-EFFORT="medium"
+MODEL="openai-codex/gpt-6.1-sol"
+EFFORT="high"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/firstmate-policy-model-checks.XXXXXX")
 TMP=$(cd "$TMP" && pwd -P)
 trap 'rm -rf "$TMP"' EXIT
@@ -24,7 +24,7 @@ fail() {
 
 [ -x "$PI_HOMEBREW" ] || fail "Homebrew Pi executable is unavailable: $PI_HOMEBREW"
 [ -f "$POLICY" ] || fail 'agents/pi/AGENTS.md is missing'
-[ -f "$AUTH_JSON" ] || fail 'Pi xAI auth.json is missing; isolated checks need credentials'
+[ -f "$AUTH_JSON" ] || fail 'Pi auth.json is missing; isolated Sol policy checks need credentials'
 [ -f "$FIXTURES/absent/AGENTS.md" ] || fail 'absent-captain fixture is missing'
 [ -f "$FIXTURES/stale/AGENTS.md" ] || fail 'stale-captain fixture is missing'
 [ -f "$FIXTURES/worker/AGENTS.md" ] || fail 'worker fixture is missing'
@@ -40,7 +40,7 @@ for name in absent stale worker; do
 done
 
 FORMAT=$'Answer with exactly these fields, then stop. Do not use tools.\nSTAGE: gsd-discuss | gsd-plan | gsd-work | assigned-phase | ask-cycle\nWAIT_FOR_GO: yes | no | n/a\nASK_WHETHER_TO_USE_CYCLE: yes | no\nAUTHORITY_RECORDED: yes | no | n/a\nRATIONALE: one sentence'
-ROUTE_FORMAT=$'Recommend only the Firstmate route; do not invoke or hand off to it. Answer with exactly these fields, then stop. Do not use tools.\nSELECTED_MODEL: openai-codex/gpt-6-luna | openai-codex/gpt-6.1-sol | gpt-6-astra | xai/grok-4.7 | defer\nSELECTED_EFFORT: max | high | medium | defer\nRATIONALE: one sentence'
+ROUTE_FORMAT=$'Recommend only the Firstmate route; do not invoke or hand off to it. Answer with exactly these fields, then stop. Do not use tools.\nSELECTED_MODEL: openai-codex/gpt-6-luna | openai-codex/gpt-6.1-sol | defer\nSELECTED_EFFORT: max | high | defer\nRATIONALE: one sentence'
 
 run_case() {
   local name=$1 active=$2 project=$3 prompt=$4 format=${5:-$FORMAT}
@@ -84,7 +84,7 @@ parent=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD)
   printf -- "- Effort: \`%s\`\n" "$EFFORT"
   printf '%s\n' "- Isolated \`PI_CODING_AGENT_DIR\` with \`agents/pi/AGENTS.md\` plus a symlink to live \`auth.json\` (read credentials only)."
   printf '%s\n' "- Project fixtures: \`tests/fixtures/firstmate-policy/{absent,stale,worker}\`."
-  printf -- '- No live captain-memory overwrite, no activation, no rebuild, no Codex.\n\n'
+  printf -- '- No live captain-memory overwrite, no activation, no rebuild, and no Grok; only the configured Sol probe is invoked.\n\n'
 } >"$EVIDENCE"
 
 observe() {
@@ -208,17 +208,13 @@ route_observe execution-default \
   'Coordinator task: choose the unpinned execution default for a new Firstmate home. Select the default model and effort.' \
   openai-codex/gpt-6-luna max
 route_observe routine-security-analysis \
-  'Routine security analysis is not an Astra exception' \
+  'Routine security analysis stays on Sol high' \
   'Coordinator task: analyze the ordinary security properties of a settings export endpoint. No Sol pass has found an unresolved consequential blocker. Security analysis is explicitly routine. Select the default model and effort.' \
   openai-codex/gpt-6.1-sol high
-route_observe documented-sol-blocker \
-  'Documented consequential blocker may receive a bounded Astra consult' \
-  'Coordinator task: Sol high completed a bounded analysis and returned contradictory conclusions about whether an authentication invariant can be bypassed. Narrower evidence gathering was completed and did not resolve the contradiction. Record the exact decision question: is the bypass possible under invariant X? Select one bounded reasoning consult and effort.' \
-  gpt-6-astra high
-route_observe captain-astra-effort-override \
-  'Explicit captain Astra and effort selection overrides the default' \
-  'Captain explicitly selects model gpt-6-astra and effort medium for this ordinary plan. This is an explicit override, not a blocker escalation. Select the captain-requested model and effort.' \
-  gpt-6-astra medium
+route_observe unavailable-route-no-fallback \
+  'Unavailable Sol route defers instead of falling back to another provider' \
+  'Coordinator task: the approved Sol 6.1 route is unavailable because its required capability is not supported. Do not use a different provider, Grok, or another model as a quota fallback. Defer until the approved route is available.' \
+  defer defer
 route_observe captain-luna-effort-override \
   'Captain-selected Luna effort overrides the max execution default' \
   'Captain explicitly selects model openai-codex/gpt-6-luna and effort medium for this implementation. This is an explicit effort override. Select the captain-requested model and effort.' \

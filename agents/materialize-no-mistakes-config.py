@@ -20,8 +20,8 @@ DEFAULT_PI_ARGS = (
 CONFIG_NAME = "config.yaml"
 MAX_BYTES = 1_048_576
 STUB = """\
-# Pipeline execution defaults to Pi with Luna at max; explicit captain model
-# choices are preserved. Sol handles routine Firstmate review; Astra is gated.
+# Pipeline execution defaults to Pi with Luna 6 at max; explicit captain
+# model/effort choices are preserved. Sol 6.1 at high owns Firstmate review.
 agent: pi
 agent_args_override:
   pi:

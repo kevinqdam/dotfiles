@@ -1,0 +1,9 @@
+{
+  "name": "dotfiles-pi-sdk-contract-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.3"
+  }
+}

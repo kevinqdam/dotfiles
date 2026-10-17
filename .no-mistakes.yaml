@@ -1,2 +1,2 @@
-# Repository-owned no-mistakes declaration: this project intentionally has no CI.
-no_ci: true
+# Deterministic source, materializer, and Pi policy checks run in GitHub Actions.
+no_ci: false

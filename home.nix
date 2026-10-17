@@ -172,6 +172,13 @@ in {
       "${./agents/pi-normalize-package.mjs}"
   '';
 
+  # Seed only missing standalone Pi model defaults. Existing user settings,
+  # packages, enabled models, and resource filters remain Pi-owned.
+  home.activation.piSettings = lib.hm.dag.entryAfter [ "piPackages" ] ''
+    ${pkgs.python3}/bin/python3 ${./agents/materialize-pi-settings.py} \
+      "${config.home.homeDirectory}/.pi/agent"
+  '';
+
   # Global Pi context for Firstmate coordinator discuss-plan-work policy.
   # Ordinary coding sessions, crewmates, and no-mistakes step agents ignore it.
   home.file.".pi/agent/AGENTS.md".source = ./agents/pi/AGENTS.md;
