@@ -4,14 +4,20 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MATERIALIZER="$SCRIPT_DIR/agents/materialize-pi-settings.py"
+LOCK_WRAPPER="$SCRIPT_DIR/agents/materialize-pi-settings-lock.mjs"
+PI_EXECUTABLE=${PI_TEST_EXECUTABLE:-/opt/homebrew/bin/pi}
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/pi-settings-config-test.XXXXXX")
 TMP=$(cd "$TMP" && pwd -P)
 stopped_pid=
+wrapper_pid=
 
 cleanup() {
   if [ -n "$stopped_pid" ]; then
     kill -CONT "$stopped_pid" >/dev/null 2>&1 || true
     kill "$stopped_pid" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$wrapper_pid" ]; then
+    kill "$wrapper_pid" >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -51,23 +57,53 @@ wait_until_stopped() {
   fail 'settings materializer did not reach test hook'
 }
 
+run_materializer() {
+  node "$LOCK_WRAPPER" "$PI_EXECUTABLE" python3 "$MATERIALIZER" "$1"
+}
+
 start_hooked() {
   hook=$1
   agent_dir=$2
-  PI_SETTINGS_CONFIG_TEST_HOOK="$hook" python3 -u "$MATERIALIZER" "$agent_dir" \
+  pid_file="$TMP/stopped-python.pid"
+  rm -f "$pid_file"
+  PI_SETTINGS_CONFIG_TEST_HOOK="$hook" \
+    PI_SETTINGS_CONFIG_TEST_PID_FILE="$pid_file" \
+    node "$LOCK_WRAPPER" "$PI_EXECUTABLE" python3 "$MATERIALIZER" "$agent_dir" \
     >/dev/null 2>&1 &
-  stopped_pid=$!
+  wrapper_pid=$!
+  attempt=0
+  while [ ! -s "$pid_file" ] && [ "$attempt" -lt 200 ]; do
+    kill -0 "$wrapper_pid" 2>/dev/null || fail 'settings wrapper exited before Python test hook'
+    sleep 0.01
+    attempt=$((attempt + 1))
+  done
+  [ -s "$pid_file" ] || fail 'Python materializer did not report its test-hook PID'
+  stopped_pid=$(cat "$pid_file")
   wait_until_stopped "$stopped_pid"
 }
 
 finish_hooked_failure() {
   message=$1
   kill -CONT "$stopped_pid"
-  if wait "$stopped_pid"; then
+  if wait "$wrapper_pid"; then
     stopped_pid=
+    wrapper_pid=
     fail "$message"
   fi
   stopped_pid=
+  wrapper_pid=
+}
+
+finish_hooked_success() {
+  message=$1
+  kill -CONT "$stopped_pid"
+  if ! wait "$wrapper_pid"; then
+    stopped_pid=
+    wrapper_pid=
+    fail "$message"
+  fi
+  stopped_pid=
+  wrapper_pid=
 }
 
 PI_PKG=${PI_TEST_PACKAGE_DIR:-}
@@ -93,7 +129,6 @@ fi
 settings_consumer() {
   agent_dir=$1
   node --input-type=module - "$PI_PKG" "$agent_dir" "$TMP" <<'EOF'
-import assert from "node:assert/strict";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -101,8 +136,7 @@ const [piPkg, agentDir, cwd] = process.argv.slice(2);
 const { SettingsManager } = await import(
   pathToFileURL(join(piPkg, "dist/core/settings-manager.js")).href
 );
-const manager = SettingsManager.create(cwd, agentDir);
-const settings = manager.settings;
+const settings = SettingsManager.create(cwd, agentDir).settings;
 console.log(JSON.stringify({
   defaultProvider: settings.defaultProvider,
   defaultModel: settings.defaultModel,
@@ -117,9 +151,37 @@ console.log(JSON.stringify({
 EOF
 }
 
+settings_write() {
+  agent_dir=$1
+  provider=$2
+  model=$3
+  thinking=$4
+  node --input-type=module - "$PI_PKG" "$agent_dir" "$TMP" \
+    "$provider" "$model" "$thinking" <<'EOF'
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const [piPkg, agentDir, cwd, provider, model, thinking] = process.argv.slice(2);
+const { SettingsManager } = await import(
+  pathToFileURL(join(piPkg, "dist/core/settings-manager.js")).href
+);
+const manager = SettingsManager.create(cwd, agentDir);
+manager.setDefaultModelAndProvider(provider, model);
+manager.setDefaultThinkingLevel(thinking);
+await manager.flush();
+console.log(JSON.stringify(manager.drainErrors().map(({ error }) => ({
+  code: error.code ?? null,
+  message: error.message,
+}))));
+EOF
+}
+
 [ ! -L "$MATERIALIZER" ] || fail 'settings materializer is a symlink'
 grep -Fq 'home.activation.piSettings = lib.hm.dag.entryAfter [ "piPackages" ]' \
   "$SCRIPT_DIR/home.nix" || fail 'Pi settings seeder is not ordered after Pi package convergence'
+# shellcheck disable=SC2016
+grep -Fq '${./agents/materialize-pi-settings-lock.mjs}' "$SCRIPT_DIR/home.nix" \
+  || fail 'Home Manager activation does not invoke the Pi-compatible settings lock'
 # shellcheck disable=SC2016
 grep -Fq '${./agents/materialize-pi-settings.py}' "$SCRIPT_DIR/home.nix" \
   || fail 'Home Manager activation does not invoke the Pi settings seeder'
@@ -131,9 +193,10 @@ from pathlib import Path
 import sys
 compile(Path(sys.argv[1]).read_text(encoding="utf-8"), sys.argv[1], "exec")
 PY
+node --check "$LOCK_WRAPPER"
 
 fresh="$TMP/fresh/.pi/agent"
-python3 "$MATERIALIZER" "$fresh" >/dev/null
+run_materializer "$fresh" >/dev/null
 [ -f "$fresh/settings.json" ] || fail 'fresh settings.json was not created'
 [ ! -L "$fresh/settings.json" ] || fail 'fresh settings.json is a symlink'
 jq -e '
@@ -148,7 +211,7 @@ assert_eq '{"defaultProvider":"openai-codex","defaultModel":"gpt-6.1-sol","defau
 fresh_snapshot="$TMP/fresh.snapshot"
 cp "$fresh/settings.json" "$fresh_snapshot"
 fresh_inode=$(inode_of "$fresh/settings.json")
-python3 "$MATERIALIZER" "$fresh" >/dev/null
+run_materializer "$fresh" >/dev/null
 cmp -s "$fresh_snapshot" "$fresh/settings.json" || fail 'repeated fresh seeding changed settings bytes'
 assert_eq "$fresh_inode" "$(inode_of "$fresh/settings.json")"
 
@@ -168,7 +231,7 @@ cat > "$preserved/settings.json" <<'EOF'
   "defaultThinkingLevel": "medium"
 }
 EOF
-python3 "$MATERIALIZER" "$preserved" >/dev/null
+run_materializer "$preserved" >/dev/null
 jq -e '
   .defaultProvider == "openai-codex"
   and .defaultModel == "gpt-6.1-sol"
@@ -186,7 +249,7 @@ sol_missing_effort="$TMP/sol-missing-effort/.pi/agent"
 mkdir -p "$sol_missing_effort"
 printf '{"defaultProvider":"openai-codex","defaultModel":"gpt-6.1-sol","theme":"dark"}\n' \
   > "$sol_missing_effort/settings.json"
-python3 "$MATERIALIZER" "$sol_missing_effort" >/dev/null
+run_materializer "$sol_missing_effort" >/dev/null
 jq -e '.defaultProvider == "openai-codex" and .defaultModel == "gpt-6.1-sol" and .defaultThinkingLevel == "high" and .theme == "dark"' \
   "$sol_missing_effort/settings.json" >/dev/null || fail 'missing Sol thinking default was not seeded'
 [ "$(settings_consumer "$sol_missing_effort" | tail -n 1 | jq -r .defaultThinkingLevel)" = high ] \
@@ -206,7 +269,7 @@ EOF
 custom_snapshot="$TMP/custom.snapshot"
 cp "$custom/settings.json" "$custom_snapshot"
 custom_inode=$(inode_of "$custom/settings.json")
-python3 "$MATERIALIZER" "$custom" >/dev/null
+run_materializer "$custom" >/dev/null
 cmp -s "$custom_snapshot" "$custom/settings.json" || fail 'complete custom route was rewritten'
 assert_eq "$custom_inode" "$(inode_of "$custom/settings.json")"
 
@@ -222,7 +285,7 @@ for partial in provider-only model-only; do
   cp "$partial_dir/settings.json" "$snapshot"
   before_inode=$(inode_of "$partial_dir/settings.json")
   diagnostic="$TMP/$partial.stderr"
-  python3 "$MATERIALIZER" "$partial_dir" >/dev/null 2>"$diagnostic"
+  run_materializer "$partial_dir" >/dev/null 2>"$diagnostic"
   grep -Fq 'partial default model route found; leaving settings unchanged' "$diagnostic" \
     || fail "$partial ambiguous route did not produce an actionable diagnostic"
   cmp -s "$snapshot" "$partial_dir/settings.json" || fail "$partial ambiguous route was rewritten"
@@ -236,7 +299,7 @@ printf '{"defaultProvider":"openai-codex","defaultModel":"gpt-6-luna"}\n' \
 other_snapshot="$TMP/other-route.snapshot"
 cp "$other_route/settings.json" "$other_snapshot"
 other_inode=$(inode_of "$other_route/settings.json")
-python3 "$MATERIALIZER" "$other_route" >/dev/null
+run_materializer "$other_route" >/dev/null
 cmp -s "$other_snapshot" "$other_route/settings.json" || fail 'complete non-Sol route was rewritten'
 assert_eq "$other_inode" "$(inode_of "$other_route/settings.json")"
 
@@ -251,7 +314,7 @@ for malformed in invalid-json duplicate-key non-object; do
   snapshot="$TMP/$malformed.snapshot"
   cp "$target/settings.json" "$snapshot"
   before_inode=$(inode_of "$target/settings.json")
-  if python3 "$MATERIALIZER" "$target" >/dev/null 2>&1; then
+  if run_materializer "$target" >/dev/null 2>&1; then
     fail "$malformed settings were accepted"
   fi
   cmp -s "$snapshot" "$target/settings.json" || fail "$malformed settings were rewritten"
@@ -262,7 +325,7 @@ symlink="$TMP/symlink/.pi/agent"
 mkdir -p "$symlink"
 printf '{"theme":"dark"}\n' > "$TMP/outside-settings.json"
 ln -s "$TMP/outside-settings.json" "$symlink/settings.json"
-if python3 "$MATERIALIZER" "$symlink" >/dev/null 2>&1; then
+if run_materializer "$symlink" >/dev/null 2>&1; then
   fail 'settings symlink did not fail closed'
 fi
 [ -L "$symlink/settings.json" ] || fail 'settings symlink was replaced'
@@ -272,7 +335,7 @@ hard_linked="$TMP/hard-linked/.pi/agent"
 mkdir -p "$hard_linked"
 printf '{"theme":"dark"}\n' > "$TMP/hard-linked-source.json"
 ln "$TMP/hard-linked-source.json" "$hard_linked/settings.json"
-if python3 "$MATERIALIZER" "$hard_linked" >/dev/null 2>&1; then
+if run_materializer "$hard_linked" >/dev/null 2>&1; then
   fail 'hard-linked settings file did not fail closed'
 fi
 assert_eq 2 "$(python3 - "$hard_linked/settings.json" <<'PY'
@@ -281,6 +344,39 @@ import sys
 print(os.stat(sys.argv[1]).st_nlink)
 PY
 )"
+
+pi_interleave="$TMP/pi-interleave/.pi/agent"
+mkdir -p "$pi_interleave"
+printf '{"theme":"fixture-dark"}\n' > "$pi_interleave/settings.json"
+pi_before="$TMP/pi-interleave.before.json"
+cp "$pi_interleave/settings.json" "$pi_before"
+pi_before_inode=$(inode_of "$pi_interleave/settings.json")
+start_hooked before-replace "$pi_interleave"
+writer_errors=$(settings_write "$pi_interleave" fixture-provider operator-choice low | tail -n 1)
+if ! printf '%s\n' "$writer_errors" | jq -e 'any(.[]; .code == "ELOCKED")' >/dev/null; then
+  fail 'real Pi consumer write was not safely refused while seeding held its lock'
+fi
+cmp -s "$pi_before" "$pi_interleave/settings.json" || fail 'blocked Pi update changed settings during protected publication'
+assert_eq "$pi_before_inode" "$(inode_of "$pi_interleave/settings.json")"
+second_seed_error="$TMP/pi-interleave-second-seed.stderr"
+if run_materializer "$pi_interleave" >/dev/null 2>"$second_seed_error"; then
+  fail 'second settings seeder did not refuse Pi lock contention'
+fi
+grep -Fq 'ELOCKED' "$second_seed_error" || fail 'lock contention refusal did not report ELOCKED'
+cmp -s "$pi_before" "$pi_interleave/settings.json" || fail 'refused seeder changed Pi settings'
+finish_hooked_success 'Pi settings seeder failed after releasing the interleaving lock'
+jq -e '.defaultProvider == "openai-codex" and .defaultModel == "gpt-6.1-sol" and .defaultThinkingLevel == "high"' \
+  "$pi_interleave/settings.json" >/dev/null || fail 'locked seeder did not publish its missing defaults'
+writer_errors=$(settings_write "$pi_interleave" fixture-provider operator-choice low | tail -n 1)
+assert_eq '[]' "$writer_errors"
+operator_snapshot="$TMP/pi-interleave.operator.json"
+cp "$pi_interleave/settings.json" "$operator_snapshot"
+operator_inode=$(inode_of "$pi_interleave/settings.json")
+run_materializer "$pi_interleave" >/dev/null
+cmp -s "$operator_snapshot" "$pi_interleave/settings.json" || fail 'completed Pi operator update was overwritten by later activation'
+assert_eq "$operator_inode" "$(inode_of "$pi_interleave/settings.json")"
+assert_eq '{"defaultProvider":"fixture-provider","defaultModel":"operator-choice","defaultThinkingLevel":"low"}' \
+  "$(settings_consumer "$pi_interleave" | tail -n 1 | jq -c '{defaultProvider,defaultModel,defaultThinkingLevel}')"
 
 race="$TMP/race/.pi/agent"
 mkdir -p "$race"
@@ -307,4 +403,4 @@ ln -s "$outside" "$parent_race"
 finish_hooked_failure 'Pi agent directory replacement did not fail closed'
 [ ! -e "$outside/settings.json" ] || fail 'directory replacement escaped through settings.json'
 
-printf 'ok - Pi global settings defaults, preservation, consumer loading, and fail-closed publication\n'
+printf 'ok - Pi global settings lock serialization, consumer preservation, defaults, and fail-closed publication\n'

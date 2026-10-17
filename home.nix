@@ -172,10 +172,13 @@ in {
       "${./agents/pi-normalize-package.mjs}"
   '';
 
-  # Seed only missing standalone Pi model defaults. Existing user settings,
-  # packages, enabled models, and resource filters remain Pi-owned.
+  # Seed only missing standalone Pi model defaults inside Pi 0.84.3's own
+  # global-settings lock. Existing choices and resource state remain Pi-owned.
   home.activation.piSettings = lib.hm.dag.entryAfter [ "piPackages" ] ''
-    ${pkgs.python3}/bin/python3 ${./agents/materialize-pi-settings.py} \
+    ${pkgs.nodejs_22}/bin/node ${./agents/materialize-pi-settings-lock.mjs} \
+      "/opt/homebrew/bin/pi" \
+      "${pkgs.python3}/bin/python3" \
+      ${./agents/materialize-pi-settings.py} \
       "${config.home.homeDirectory}/.pi/agent"
   '';
 

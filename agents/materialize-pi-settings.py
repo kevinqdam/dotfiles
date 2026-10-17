@@ -35,6 +35,10 @@ def fail(message: str, *, diagnostic: bool = False) -> None:
 
 def test_hook(name: str) -> None:
     if os.environ.get("PI_SETTINGS_CONFIG_TEST_HOOK") == name:
+        pid_file = os.environ.get("PI_SETTINGS_CONFIG_TEST_PID_FILE")
+        if pid_file:
+            with open(pid_file, "w", encoding="ascii") as marker:
+                marker.write(str(os.getpid()))
         os.kill(os.getpid(), signal.SIGSTOP)
 
 
@@ -324,14 +328,37 @@ def materialize() -> int:
         os.close(fd)
 
 
-def main(argv: list[str]) -> int:
+def prepare_directory(path: str) -> int:
     global agent_path, agent_fd
-    if len(argv) != 2:
-        print(f"usage: {argv[0]} <canonical-pi-agent-directory>", file=sys.stderr)
-        return 2
-    agent_path = argv[1]
+    agent_path = path
     try:
         agent_fd = open_directory_chain(agent_path, True)
+    except OSError:
+        fail("canonical Pi agent directory is not a stable regular directory")
+    try:
+        if not verify_agent_directory():
+            fail("canonical Pi agent directory changed during preparation")
+        return 0
+    except SystemExit as exc:
+        return int(exc.code)
+    finally:
+        os.close(agent_fd)
+        agent_fd = -1
+
+
+def main(argv: list[str]) -> int:
+    global agent_path, agent_fd
+    if len(argv) == 3 and argv[1] == "--prepare":
+        return prepare_directory(argv[2])
+    if len(argv) != 3 or argv[1] != "--locked":
+        print(
+            f"usage: {argv[0]} --prepare|--locked <canonical-pi-agent-directory>",
+            file=sys.stderr,
+        )
+        return 2
+    agent_path = argv[2]
+    try:
+        agent_fd = open_directory_chain(agent_path, False)
     except OSError:
         fail("canonical Pi agent directory is not a stable regular directory")
     try:

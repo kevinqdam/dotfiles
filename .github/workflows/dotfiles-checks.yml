@@ -28,6 +28,7 @@ jobs:
           bash -n tests/firstmate-config.test.sh tests/no-mistakes-config.test.sh \
             tests/pi-settings-config.test.sh tests/firstmate-policy.test.sh \
             tests/firstmate-policy-model-checks.sh
+          node --check agents/materialize-pi-settings-lock.mjs
           python3 - agents/materialize-pi-settings.py agents/materialize-no-mistakes-config.py <<'PY'
           from pathlib import Path
           import sys
